@@ -1,0 +1,50 @@
+plugins {
+    id 'java'
+}
+
+group = 'org.openmbee.flexo'
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Core CLI (provided - not bundled)
+    compileOnly files('../flexo-cli-client/build/libs/flexo-cli-client-0.1.0.jar')
+
+    // Picocli for command line parsing
+    implementation 'info.picocli:picocli:4.7.5'
+
+    // HTTP client
+    implementation 'org.apache.httpcomponents.client5:httpclient5:5.3'
+    implementation 'org.apache.httpcomponents.client5:httpclient5-fluent:5.3'
+
+    // JSON processing
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.0'
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.17.0'
+    implementation 'com.fasterxml.jackson.core:jackson-annotations:2.17.0'
+
+    // Logging
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+jar {
+    archiveBaseName = 'flexo-cli-sysmlv2-plugin'
+
+    // Include dependencies in JAR (fat jar)
+    from {
+        configurations.runtimeClasspath.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    // Exclude META-INF signature files
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+}
