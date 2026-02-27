@@ -26,11 +26,25 @@ dependencies {
 
     // Logging
     implementation 'org.slf4j:slf4j-api:2.0.9'
+    
+    // Testing
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
+    testImplementation 'org.mockito:mockito-core:5.8.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
+}
+
+test {
+    useJUnitPlatform()
+    maxParallelForks = 1
+    forkEvery = 1
+    
+    // Disable parallel test execution within JUnit
+    systemProperty 'junit.jupiter.execution.parallel.enabled', 'false'
 }
 
 jar {

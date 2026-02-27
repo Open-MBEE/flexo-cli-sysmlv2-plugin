@@ -1,0 +1,38 @@
+version: '3.8'
+
+# Docker compose for local SysML v2 API service
+# This setup provides a local SysML v2 API server for development
+# and testing with the flexo-cli-sysmlv2-plugin
+
+services:
+
+  sysmlv2-service:
+    image: openmbee/flexo-sysmlv2:v0.1.0
+    hostname: sysmlv2-service
+    container_name: sysmlv2-service
+    ports:
+      - "9000:9000"
+    environment:
+      # Service configuration
+      - SERVER_PORT=9000
+    networks:
+      - sysmlv2-local
+    restart: on-failure
+
+networks:
+  sysmlv2-local:
+    name: sysmlv2-local-network
+    driver: bridge
+
+# This file is automatically managed by the Flexo CLI SysML v2 Plugin.
+# 
+# The 'flexo sysml init' command automatically:
+# 1. Extracts this compose file from the plugin JAR
+# 2. Starts the SysML v2 API service (port 9000)
+# 3. Updates the ~/.flexo/config with sysmlv2.url
+#
+# Usage:
+#   flexo sysml init                # Automatic setup (recommended)
+#   flexo sysml init --skip-docker  # Skip Docker startup
+#
+# NOTE: This setup is for local development and testing only.
