@@ -14,24 +14,32 @@ import com.fasterxml.jackson.databind.ObjectMapper;
     name = "branch",
     description = "Manage project branches"
 )
-public class BranchCommand extends PluginCommand {
+public class BranchCommand extends SysMLBaseCommand {
 
     @Command(name = "list", description = "List branches in a project")
-    public static class ListCommand extends PluginCommand {
-        @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
+    public static class ListCommand extends SysMLBaseCommand {
+        @Option(names = {"--project", "-p"}, required = true, description = "Project ID (use --map-from to provide remote ID)")
         private String projectId;
 
         @Override
         public void run() {
             try {
-                debug("Listing branches for project: " + projectId);
+                String url = getSysMLUrl();
+                
+                // Map project ID if --map-from is specified
+                String actualProjectId = mapProjectId(projectId);
+                if (!actualProjectId.equals(projectId)) {
+                    info("Using mapped local project ID: " + actualProjectId);
+                }
+                
+                debug("Listing branches for project: " + actualProjectId);
 
                 SysMLv2Client client = new SysMLv2Client(
-                    getConfig().getMmsUrl(),
+                    url,
                     getClient()
                 );
 
-                String response = client.getBranches(projectId);
+                String response = client.getBranches(actualProjectId);
 
                 ObjectMapper mapper = new ObjectMapper();
                 JsonNode root = mapper.readTree(response);
@@ -41,7 +49,7 @@ public class BranchCommand extends PluginCommand {
                     for (JsonNode branch : root) {
                         String id = branch.has("@id") ? branch.get("@id").asText() : "unknown";
                         String name = branch.has("name") ? branch.get("name").asText() : id;
-                        info("  " + name);
+                        info("  " + name + " (ID: " + id + ")");
                     }
                 } else {
                     info("No branches found");

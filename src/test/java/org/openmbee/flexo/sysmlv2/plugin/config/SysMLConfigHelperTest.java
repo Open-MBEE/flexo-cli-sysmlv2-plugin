@@ -3,6 +3,7 @@ package org.openmbee.flexo.sysmlv2.plugin.config;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.openmbee.flexo.sysmlv2.plugin.model.SysMLRemote;
 
 import java.io.File;
@@ -14,9 +15,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Tests for SysMLConfigHelper
- * Note: These tests use temporary directories to ensure isolation
- * Tests run sequentially due to Gradle configuration
+ * Note: These tests use temporary directories and manipulate user.home system property
+ * @ResourceLock ensures tests run sequentially to prevent interference
  */
+@ResourceLock("user.home")
 class SysMLConfigHelperTest {
 
     private String originalHome;

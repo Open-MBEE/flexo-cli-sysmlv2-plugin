@@ -160,6 +160,70 @@ flexo sysml --remote staging project create --name "Test"
 flexo sysml --remote local element list --project PROJECT_ID --commit COMMIT_ID
 ```
 
+### Project Mapping Commands
+
+Due to the SysML v2 API requiring random project IDs, use mappings to transparently redirect queries:
+
+```bash
+# List all project mappings
+flexo sysml map list
+flexo sysml map ls           # Alias
+
+# Create a mapping (maps local project to remote project)
+flexo sysml map add <local-project-id> <remote-name> <remote-project-id>
+flexo sysml map add my-local-proj staging proj-abc123
+
+# Show mapping details
+flexo sysml map show <local-project-id>
+flexo sysml map show my-local-proj
+
+# Remove a mapping
+flexo sysml map remove <local-project-id>
+flexo sysml map rm my-local-proj     # Alias
+
+# Get help
+flexo sysml map --help
+```
+
+### Branch Mapping Commands
+
+Branches also get random GUIDs. Map branch IDs under their project mappings:
+
+```bash
+# List branch mappings for a project
+flexo sysml map list-branches <local-project-id>
+flexo sysml map ls-branches my-local-proj
+
+# Add a branch mapping
+flexo sysml map add-branch <local-project-id> <local-branch-id> <remote-branch-id>
+flexo sysml map add-branch my-local-proj local-master-guid remote-master-guid
+
+# Remove a branch mapping
+flexo sysml map remove-branch <local-project-id> <local-branch-id>
+flexo sysml map rm-branch my-local-proj local-master-guid
+```
+
+### Using Mappings with Commands
+
+Once configured, mappings allow you to query local projects using remote project IDs:
+
+```bash
+# Query with remote project ID - transparently maps to local
+flexo sysml --map-from project get --project remote-proj-xyz789
+# Automatically queries local project "my-local-proj"
+
+# Works with all project-based commands
+flexo sysml --map-from element list --project remote-proj-xyz789 --commit HEAD
+flexo sysml --map-from branch list --project remote-proj-xyz789
+
+# View branches with their IDs (for creating branch mappings)
+flexo sysml branch list --project my-local-proj
+# Output shows: master (ID: local-master-guid-123)
+
+# Without --map-from, uses the ID as-is
+flexo sysml project get --project my-local-proj
+```
+
 ### Project Commands
 
 ```bash
@@ -235,11 +299,17 @@ All commands support standard Flexo CLI options plus plugin-specific options:
 # Use a specific remote
 flexo sysml --remote production project list
 
+# Use project ID mapping (maps remote IDs to local IDs)
+flexo sysml --map-from project get --project remote-proj-id-123
+
+# Combine remote and mapping
+flexo sysml --remote staging --map-from element list --project remote-proj-id
+
 # Verbose output
 flexo -v sysml project list
 
-# Combine remote with other options
-flexo -v sysml --remote staging project create --name "Test"
+# Combine multiple options
+flexo -v sysml --remote staging --map-from project create --name "Test"
 
 # Custom configuration
 flexo --config ~/.flexo/custom-config sysml element list
@@ -261,13 +331,26 @@ sysmlv2.remote.production.url=https://sysml.example.com
 # Default remote (used when --remote not specified)
 sysmlv2.default.remote=origin
 
+# Project mappings (local project -> remote project)
+sysmlv2.mapping.proj-local-abc.remote=staging
+sysmlv2.mapping.proj-local-abc.remoteProjectId=proj-remote-xyz
+
+# Branch mappings (scoped under project mappings)
+sysmlv2.mapping.proj-local-abc.branch.local-master-guid.remoteBranchId=remote-master-guid
+sysmlv2.mapping.proj-local-abc.branch.local-dev-guid.remoteBranchId=remote-dev-guid
+
+# Another project mapping
+sysmlv2.mapping.my-model.remote=production
+sysmlv2.mapping.my-model.remoteProjectId=prod-model-123
+sysmlv2.mapping.my-model.branch.local-main-guid.remoteBranchId=remote-main-guid
+
 # Standard Flexo CLI configuration
 mms.url=http://localhost:8080
 ```
 
 ### Configuration Management
 
-Remotes are managed via commands (recommended):
+Remotes and mappings are managed via commands (recommended):
 
 ```bash
 # Automated setup (creates 'origin' remote)
@@ -277,6 +360,16 @@ flexo sysml init
 flexo sysml remote add <name> <url>
 flexo sysml remote remove <name>
 flexo sysml remote set-url <name> <url>
+
+# Project mapping management
+flexo sysml map add <local-project-id> <remote-name> <remote-project-id>
+flexo sysml map remove <local-project-id>
+flexo sysml map list
+
+# Branch mapping management
+flexo sysml map add-branch <local-project-id> <local-branch-id> <remote-branch-id>
+flexo sysml map remove-branch <local-project-id> <local-branch-id>
+flexo sysml map list-branches <local-project-id>
 ```
 
 ### Backward Compatibility
@@ -291,6 +384,7 @@ The plugin maps to the following SysML v2 API endpoints:
 |---------|-------------|----------|
 | `init` | - | Starts local Docker service & creates remote |
 | `remote list/add/remove/...` | - | Manages remote configurations |
+| `map list/add/remove/show` | - | Manages project mappings (config only) |
 | `project list` | GET | `/projects` |
 | `project get` | GET | `/projects/{id}` |
 | `project create` | POST | `/projects` |
@@ -362,6 +456,58 @@ flexo sysml project create --name "Collaborative Model"
 flexo sysml --remote local project list
 ```
 
+### Project Synchronization Workflow
+
+Handle the SysML v2 API's random project and branch ID limitation using transparent mappings:
+
+```bash
+# 1. Set up local and remote environments
+flexo sysml init --remote-name local
+flexo sysml remote add staging https://staging.example.com
+
+# 2. Create project locally
+flexo sysml project create --name "Aircraft Model"
+# Note the generated project ID, e.g., "proj-local-abc123"
+
+# 3. On the remote (staging), a project already exists
+# Remote project ID: "proj-remote-xyz789"
+
+# 4. Create project mapping
+flexo sysml map add proj-local-abc123 staging proj-remote-xyz789
+
+# 5. Get branch IDs from both local and remote
+flexo sysml branch list --project proj-local-abc123
+# Output: master (ID: local-master-guid-aaa)
+
+flexo sysml --remote staging branch list --project proj-remote-xyz789
+# Output: master (ID: remote-master-guid-bbb)
+
+# 6. Create branch mapping
+flexo sysml map add-branch proj-local-abc123 local-master-guid-aaa remote-master-guid-bbb
+
+# 7. View all mappings
+flexo sysml map show proj-local-abc123
+flexo sysml map list-branches proj-local-abc123
+
+# 8. Query local project using remote IDs
+# The mapping transparently redirects to the local project
+flexo sysml --map-from project get --project proj-remote-xyz789
+# Automatically queries proj-local-abc123 locally
+
+# 9. Works with all project-based commands
+flexo sysml --map-from element list --project proj-remote-xyz789 --commit HEAD
+flexo sysml --map-from branch list --project proj-remote-xyz789
+```
+
+**How it works**: When you use `--map-from`, the plugin:
+1. Looks up the provided project ID in your project mappings
+2. Translates it to the local project ID
+3. Looks up branch IDs in your branch mappings (if applicable)
+4. Translates those to local branch IDs
+5. Queries the local API with the translated IDs
+
+This allows you to use remote project and branch IDs in your queries while working with local projects.
+
 ## Development
 
 ### Building
@@ -399,6 +545,7 @@ flexo-cli-sysmlv2-plugin/
 │   │   │   ├── SysMLBaseCommand.java    # Base for remote-aware commands
 │   │   │   ├── InitCommand.java         # Init/deployment command
 │   │   │   ├── RemoteCommand.java       # Remote management commands
+│   │   │   ├── MapCommand.java          # Project mapping commands
 │   │   │   ├── ProjectCommand.java      # Project operations
 │   │   │   ├── ElementCommand.java      # Element operations
 │   │   │   ├── BranchCommand.java       # Branch operations
@@ -409,9 +556,10 @@ flexo-cli-sysmlv2-plugin/
 │   │   ├── client/
 │   │   │   └── SysMLv2Client.java       # HTTP client wrapper
 │   │   ├── model/
-│   │   │   └── SysMLRemote.java         # Remote model
+│   │   │   ├── SysMLRemote.java         # Remote model
+│   │   │   └── ProjectMapping.java      # Project mapping model
 │   │   └── config/
-│   │       └── SysMLConfigHelper.java   # Config management for remotes
+│   │       └── SysMLConfigHelper.java   # Config management for remotes & mappings
 │   └── resources/
 │       ├── sysmlv2-docker-compose.yml   # Docker compose for local deployment
 │       └── META-INF/services/

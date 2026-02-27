@@ -15,6 +15,7 @@ import picocli.CommandLine.Option;
     subcommands = {
         InitCommand.class,
         RemoteCommand.class,
+        MapCommand.class,
         ProjectCommand.class,
         ElementCommand.class,
         BranchCommand.class,
@@ -29,8 +30,15 @@ public class SysMLCommand extends PluginCommand {
     @Option(names = {"--remote"}, description = "Remote SysML v2 server to use", scope = picocli.CommandLine.ScopeType.INHERIT)
     private String remoteName;
     
+    @Option(names = {"--map-from"}, description = "Map remote project ID to local project ID using configured mappings", scope = picocli.CommandLine.ScopeType.INHERIT)
+    private boolean mapFrom = false;
+    
     public String getRemoteName() {
         return remoteName;
+    }
+    
+    public boolean isMapFrom() {
+        return mapFrom;
     }
     
     @Override
@@ -40,6 +48,7 @@ public class SysMLCommand extends PluginCommand {
         info("Available commands:");
         info("  init          - Initialize local SysML v2 API service");
         info("  remote        - Manage remote SysML v2 servers");
+        info("  map           - Manage project mappings (local <-> remote)");
         info("  project       - Manage SysML projects");
         info("  element       - Query and retrieve elements");
         info("  branch        - Manage project branches");
@@ -50,5 +59,6 @@ public class SysMLCommand extends PluginCommand {
         info("");
         info("Use 'flexo sysml <command> --help' for more information");
         info("Use 'flexo sysml --remote <name> <command>' to use a specific remote");
+        info("Use 'flexo sysml --map-from <command>' to map remote project IDs to local");
     }
 }

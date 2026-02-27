@@ -71,7 +71,7 @@ public class ProjectCommand extends SysMLBaseCommand {
 
     @Command(name = "get", description = "Get project details")
     public static class GetCommand extends SysMLBaseCommand {
-        @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
+        @Option(names = {"--project", "-p"}, required = true, description = "Project ID (use --map-from to provide remote ID)")
         private String projectId;
 
         @Override
@@ -79,14 +79,21 @@ public class ProjectCommand extends SysMLBaseCommand {
             try {
                 String url = getSysMLUrl();
                 debug("Using SysML v2 API at: " + url);
-                debug("Getting project: " + projectId);
+                
+                // Map project ID if --map-from is specified
+                String actualProjectId = mapProjectId(projectId);
+                if (!actualProjectId.equals(projectId)) {
+                    info("Using mapped local project ID: " + actualProjectId);
+                }
+                
+                debug("Getting project: " + actualProjectId);
 
                 SysMLv2Client client = new SysMLv2Client(
                     url,
                     getClient()
                 );
 
-                String response = client.getProject(projectId);
+                String response = client.getProject(actualProjectId);
 
                 // Parse and display project details
                 ObjectMapper mapper = new ObjectMapper();

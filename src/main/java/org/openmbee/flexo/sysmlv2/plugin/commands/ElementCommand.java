@@ -17,11 +17,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
     name = "element",
     description = "Query and retrieve elements"
 )
-public class ElementCommand extends PluginCommand {
+public class ElementCommand extends SysMLBaseCommand {
 
     @Command(name = "list", description = "List elements in a project/commit")
-    public static class ListCommand extends PluginCommand {
-        @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
+    public static class ListCommand extends SysMLBaseCommand {
+        @Option(names = {"--project", "-p"}, required = true, description = "Project ID (use --map-from to provide remote ID)")
         private String projectId;
 
         @Option(names = {"--commit", "-c"}, description = "Commit ID (default: HEAD)")
@@ -36,14 +36,22 @@ public class ElementCommand extends PluginCommand {
         @Override
         public void run() {
             try {
-                debug("Listing elements (project=" + projectId + ", commit=" + commitId + ")");
+                String url = getSysMLUrl();
+                
+                // Map project ID if --map-from is specified
+                String actualProjectId = mapProjectId(projectId);
+                if (!actualProjectId.equals(projectId)) {
+                    info("Using mapped local project ID: " + actualProjectId);
+                }
+                
+                debug("Listing elements (project=" + actualProjectId + ", commit=" + commitId + ")");
 
                 SysMLv2Client client = new SysMLv2Client(
-                    getConfig().getMmsUrl(),
+                    url,
                     getClient()
                 );
 
-                String response = client.getElements(projectId, commitId, page, size);
+                String response = client.getElements(actualProjectId, commitId, page, size);
 
                 // Parse and display elements
                 ObjectMapper mapper = new ObjectMapper();
