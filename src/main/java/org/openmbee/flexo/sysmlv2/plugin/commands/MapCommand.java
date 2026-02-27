@@ -24,6 +24,7 @@ import java.util.Map;
                 MapCommand.RemoveCommand.class,
                 MapCommand.ListCommand.class,
                 MapCommand.ShowCommand.class,
+                MapCommand.LookupCommand.class,
                 MapCommand.AddBranchCommand.class,
                 MapCommand.RemoveBranchCommand.class,
                 MapCommand.ListBranchesCommand.class
@@ -222,6 +223,65 @@ public class MapCommand extends PluginCommand {
                     e.printStackTrace();
                 }
                 throw new RuntimeException("Failed to show mapping", e);
+            }
+        }
+    }
+
+    /**
+     * Lookup local project ID from remote project ID
+     */
+    @Command(
+            name = "lookup",
+            description = "Find local project ID from remote project ID",
+            mixinStandardHelpOptions = true
+    )
+    static class LookupCommand extends PluginCommand {
+        @Parameters(index = "0", description = "Remote project ID")
+        private String remoteProjectId;
+
+        @Option(names = {"--remote-name", "-r"}, description = "Remote name (default: use default remote)")
+        private String remoteName;
+
+        @Override
+        public void run() {
+            try {
+                SysMLConfigHelper config = new SysMLConfigHelper();
+
+                // Determine which remote to use
+                if (remoteName == null || remoteName.isEmpty()) {
+                    remoteName = config.getDefaultRemote();
+                    debug("Using default remote: " + remoteName);
+                }
+
+                // Look up local project ID
+                String localProjectId = config.getLocalProjectId(remoteName, remoteProjectId);
+
+                if (localProjectId == null) {
+                    error("No mapping found for remote project: " + remoteProjectId);
+                    info("Remote: " + remoteName);
+                    info("");
+                    info("Available options:");
+                    info("  1. Clone the project: flexo --remote " + remoteName + " sysml clone " + remoteProjectId);
+                    info("  2. Create mapping: flexo sysml map add <local-project-id> " + remoteName + " " + remoteProjectId);
+                    info("  3. List mappings: flexo sysml map list");
+                    System.exit(1);
+                    return;
+                }
+
+                // Found mapping - display result
+                success("Found mapping:");
+                info("  Remote Project ID: " + remoteProjectId);
+                info("  Remote Name:       " + remoteName);
+                info("  Local Project ID:  " + localProjectId);
+                info("");
+                info("You can use this local project ID with commands like:");
+                info("  flexo sysml project get --project " + localProjectId);
+                info("  flexo sysml element list --project " + localProjectId);
+
+            } catch (Exception e) {
+                error("Failed to lookup mapping: " + e.getMessage());
+                e.printStackTrace();
+                throw new RuntimeException("Failed to lookup mapping", e);
             }
         }
     }

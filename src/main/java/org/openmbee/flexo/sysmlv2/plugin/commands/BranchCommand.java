@@ -12,7 +12,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 @Command(
     name = "branch",
-    description = "Manage project branches"
+    description = "Manage project branches",
+    subcommands = {
+        BranchCommand.ListCommand.class
+    }
 )
 public class BranchCommand extends SysMLBaseCommand {
 

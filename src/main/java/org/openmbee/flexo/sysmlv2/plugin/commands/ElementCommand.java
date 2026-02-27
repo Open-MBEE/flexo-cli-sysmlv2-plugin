@@ -15,7 +15,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 @Command(
     name = "element",
-    description = "Query and retrieve elements"
+    description = "Query and retrieve elements",
+    subcommands = {
+        ElementCommand.ListCommand.class,
+        ElementCommand.GetCommand.class,
+        ElementCommand.RootsCommand.class
+    }
 )
 public class ElementCommand extends SysMLBaseCommand {
 
@@ -24,7 +29,7 @@ public class ElementCommand extends SysMLBaseCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID (use --map-from to provide remote ID)")
         private String projectId;
 
-        @Option(names = {"--commit", "-c"}, description = "Commit ID (default: HEAD)")
+        @Option(names = {"--commit"}, description = "Commit ID (default: HEAD)")
         private String commitId = "HEAD";
 
         @Option(names = {"--page"}, description = "Page number (default: 0)")
@@ -89,7 +94,7 @@ public class ElementCommand extends SysMLBaseCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
-        @Option(names = {"--commit", "-c"}, description = "Commit ID (default: HEAD)")
+        @Option(names = {"--commit"}, description = "Commit ID (default: HEAD)")
         private String commitId = "HEAD";
 
         @Parameters(index = "0", description = "Element ID")
@@ -144,7 +149,7 @@ public class ElementCommand extends SysMLBaseCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
-        @Option(names = {"--commit", "-c"}, description = "Commit ID (default: HEAD)")
+        @Option(names = {"--commit"}, description = "Commit ID (default: HEAD)")
         private String commitId = "HEAD";
 
         @Override

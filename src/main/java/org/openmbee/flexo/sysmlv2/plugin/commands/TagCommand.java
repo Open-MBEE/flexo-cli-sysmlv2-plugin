@@ -12,7 +12,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 @Command(
     name = "tag",
-    description = "Manage tags"
+    description = "Manage tags",
+    subcommands = {
+        TagCommand.ListCommand.class
+    }
 )
 public class TagCommand extends PluginCommand {
 

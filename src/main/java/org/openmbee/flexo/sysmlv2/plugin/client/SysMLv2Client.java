@@ -38,7 +38,11 @@ public class SysMLv2Client {
      * Get all projects
      */
     public String getProjects(int page, int size) throws IOException {
-        String url = baseUrl + "/projects?page=" + page + "&size=" + size;
+        // SysML v2 API uses pageSize parameter (not page/size)
+        String url = baseUrl + "/projects";
+        if (size > 0) {
+            url += "?pageSize=" + size;
+        }
         HttpGet request = new HttpGet(url);
         addAuthHeader(request);
         request.setHeader("Accept", "application/json");
@@ -64,10 +68,11 @@ public class SysMLv2Client {
     public String createProject(String name, String description) throws IOException {
         String url = baseUrl + "/projects";
 
-        // Build JSON body
+        // Build JSON body - SysML v2 API requires @type field
         StringBuilder jsonBody = new StringBuilder();
         jsonBody.append("{");
-        jsonBody.append("\"name\":\"").append(escapeJson(name)).append("\"");
+        jsonBody.append("\"@type\":\"Project\"");
+        jsonBody.append(",\"name\":\"").append(escapeJson(name)).append("\"");
         if (description != null && !description.isEmpty()) {
             jsonBody.append(",\"description\":\"").append(escapeJson(description)).append("\"");
         }
@@ -88,17 +93,15 @@ public class SysMLv2Client {
     public String updateProject(String projectId, String name, String description) throws IOException {
         String url = baseUrl + "/projects/" + projectId;
 
-        // Build JSON body
+        // Build JSON body - SysML v2 API requires @type field
         StringBuilder jsonBody = new StringBuilder();
         jsonBody.append("{");
-        boolean hasField = false;
+        jsonBody.append("\"@type\":\"Project\"");
         if (name != null && !name.isEmpty()) {
-            jsonBody.append("\"name\":\"").append(escapeJson(name)).append("\"");
-            hasField = true;
+            jsonBody.append(",\"name\":\"").append(escapeJson(name)).append("\"");
         }
         if (description != null && !description.isEmpty()) {
-            if (hasField) jsonBody.append(",");
-            jsonBody.append("\"description\":\"").append(escapeJson(description)).append("\"");
+            jsonBody.append(",\"description\":\"").append(escapeJson(description)).append("\"");
         }
         jsonBody.append("}");
 
@@ -156,6 +159,20 @@ public class SysMLv2Client {
         HttpGet request = new HttpGet(url);
         addAuthHeader(request);
         request.setHeader("Accept", "application/json");
+
+        return executeRequest(request);
+    }
+
+    /**
+     * Create or update elements in bulk (POST JSON array)
+     */
+    public String createElements(String projectId, String commitId, String elementsJson) throws IOException {
+        String url = baseUrl + "/projects/" + projectId + "/commits/" + commitId + "/elements";
+        HttpPost request = new HttpPost(url);
+        addAuthHeader(request);
+        request.setHeader("Content-Type", "application/json");
+        request.setHeader("Accept", "application/json");
+        request.setEntity(new StringEntity(elementsJson, ContentType.APPLICATION_JSON));
 
         return executeRequest(request);
     }

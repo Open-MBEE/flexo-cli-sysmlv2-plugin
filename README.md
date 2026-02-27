@@ -2,12 +2,34 @@
 
 A plugin for Flexo CLI that provides commands for interacting with SysML v2 API services.
 
+## Architecture
+
+This plugin provides a SysML v2 API interface that translates between the SysML v2 API standard and the Flexo MMS backend:
+
+```
+Client → SysML v2 API (port 9000) → Flexo MMS Layer 1 (port 8080) → Triple Store
+```
+
+**Key Points:**
+- The SysML v2 API service is a **translator/adapter** between SysML v2 and Flexo MMS
+- All project data is stored in the Flexo MMS backend
+- SysML v2 API uses UUID-based project IDs (per SysML v2 spec)
+- Flexo MMS uses string-based repo IDs (flexible naming)
+
+## Requirements
+
+1. **Flexo MMS Backend** - The SysML v2 service requires a running Flexo MMS Layer 1 service
+2. **Docker** - Required for running the SysML v2 API service locally
+3. **Java 17+** - For building the plugin
+
 ## Features
 
 This plugin provides comprehensive access to SysML v2 API operations:
 
 - **Remote Management** - Manage multiple SysML v2 servers (similar to git remotes)
 - **Local Deployment** - Automatically deploy a local SysML v2 API service via Docker
+- **Project Cloning** - Clone complete projects from remote to local with automatic mapping
+- **Pull & Push** - Sync models between local and remote using mapped project/branch IDs
 - **Project Management** - Create, list, update, and delete projects
 - **Element Operations** - Query and retrieve elements, get root elements
 - **Branch Management** - List and manage project branches
@@ -15,6 +37,7 @@ This plugin provides comprehensive access to SysML v2 API operations:
 - **Query Execution** - Execute and manage queries
 - **Tag Management** - List and manage tags
 - **Relationship Navigation** - Query element relationships
+- **Project & Branch Mapping** - Map local project/branch IDs to remote IDs for seamless workflows
 
 ## Installation
 
@@ -37,9 +60,23 @@ flexo --help  # Should show 'sysml' command
 
 ## Quick Start
 
+### Prerequisites
+
+Ensure you have a Flexo MMS backend running:
+
+```bash
+# Initialize Flexo MMS (if not already running)
+flexo init --org sysmlv2 --repo default
+```
+
+This creates:
+- Flexo MMS Layer 1 service on port 8080
+- Triple store (Fuseki) backend
+- Organization "sysmlv2" for SysML v2 projects
+
 ### Initialize Local SysML v2 Service
 
-The easiest way to get started is to use the built-in init command to deploy a local SysML v2 API service:
+Deploy a local SysML v2 API service that connects to your Flexo MMS backend:
 
 ```bash
 # Start local SysML v2 API service (requires Docker)
@@ -48,9 +85,10 @@ flexo sysml init
 
 This will:
 1. Start a Docker container running SysML v2 API service on port 9000
-2. Create a remote named 'origin' with the service URL
-3. Set 'origin' as the default remote
-4. Verify the service is healthy and ready
+2. Configure it to connect to Flexo MMS backend at localhost:8080
+3. Create a remote named 'origin' with the service URL
+4. Set 'origin' as the default remote
+5. Verify the service is healthy and ready
 
 You can now start using SysML v2 commands immediately.
 
@@ -68,7 +106,7 @@ flexo sysml remote add production https://sysml.example.com
 flexo sysml remote list
 
 # Use a specific remote for a command
-flexo sysml --remote production project list
+flexo --remote production project list
 
 # Switch default remote
 flexo sysml remote add staging https://sysml-staging.example.com --set-default
@@ -109,6 +147,148 @@ flexo sysml init --url http://custom-host:9000
 # Get help
 flexo sysml init --help
 ```
+
+### Clone Command
+
+Clone a complete SysML v2 project from a remote server to your local instance. This automatically creates project and branch mappings.
+
+```bash
+# Clone a project from the default remote
+flexo sysml clone <remote-project-id>
+
+# Clone from a specific remote
+flexo --remote production clone proj-abc-123
+
+# Clone with a custom local project name
+flexo sysml clone proj-abc-123 --name "My Local Project"
+
+# Clone with custom description
+flexo sysml clone proj-abc-123 --name "Local Copy" --description "Development copy"
+
+# Clone to a specific local SysML v2 API URL
+flexo sysml clone proj-abc-123 --to-local http://localhost:8080
+
+# Clone only a specific branch
+flexo sysml clone proj-abc-123 --branch main
+
+# Preview what would be cloned without making changes
+flexo sysml clone proj-abc-123 --dry-run
+
+# Get help
+flexo sysml clone --help
+```
+
+**What the clone command does:**
+
+1. Fetches project metadata from the remote server
+2. Creates a new local project with the same name (or custom name)
+3. Fetches all branches (or specific branch with `--branch`)
+4. Clones all elements from each branch to the local project
+5. Automatically creates project mapping (local project ID ↔ remote project ID)
+6. Automatically creates branch mappings (local branch IDs ↔ remote branch IDs)
+
+**Example workflow:**
+
+```bash
+# Step 1: Initialize local service
+flexo sysml init
+
+# Step 2: Add production remote
+flexo sysml remote add production https://sysml.example.com
+
+# Step 3: Clone a project from production to local
+flexo --remote production clone proj-remote-abc123 --name "Dev Copy"
+
+# The command output will show:
+# - Local project ID (e.g., proj-local-xyz789)
+# - Branches cloned
+# - Elements copied
+# - Mappings created
+
+# Step 4: Work with the local copy
+flexo sysml project list
+flexo sysml element list --project proj-local-xyz789
+
+# Step 5: Query using mapped IDs
+flexo --remote production --map-from project get --project proj-remote-abc123
+# This automatically translates to the local project ID
+```
+
+### Pull and Push Commands
+
+After cloning a project, you can sync changes between local and remote using pull and push commands. These commands leverage the Flexo CLI underneath, using your project and branch mappings to translate IDs automatically.
+
+**Pull Command - Fetch model from remote:**
+
+```bash
+# Pull from a mapped project (uses default branch)
+flexo sysml pull <local-project-id>
+
+# Pull from specific branch
+flexo sysml pull <local-project-id> --branch <local-branch-id>
+
+# Pull and save to file
+flexo sysml pull proj-local-xyz789 --output model.ttl
+
+# Pull with specific RDF format
+flexo sysml pull proj-local-xyz789 --format jsonld --output model.jsonld
+
+# Get help
+flexo sysml pull --help
+```
+
+**Push Command - Commit model changes to remote:**
+
+```bash
+# Push from file to mapped project
+flexo sysml push <local-project-id> --message "Update model" --input model.ttl
+
+# Push from stdin
+cat model.ttl | flexo sysml push proj-local-xyz789 --message "Update from script"
+
+# Push to specific branch
+flexo sysml push proj-local-xyz789 --branch <local-branch-id> --message "Branch update" --input model.ttl
+
+# Push with specific RDF format
+flexo sysml push proj-local-xyz789 --message "Update" --input model.jsonld --format jsonld
+
+# Get help
+flexo sysml push --help
+```
+
+**How Pull/Push Work:**
+
+1. **ID Translation**: Commands look up your project/branch mappings automatically
+2. **Flexo CLI Delegation**: Under the hood, they call `flexo pull` and `flexo push` with the remote IDs
+3. **Seamless Integration**: You work with local IDs, the plugin handles the remote translation
+
+**Example Workflow:**
+
+```bash
+# 1. Clone a project (creates mappings)
+flexo --remote production clone proj-remote-abc123 --name "Dev Copy"
+# Output: Created local project proj-local-xyz789
+
+# 2. Pull latest changes from remote
+flexo sysml pull proj-local-xyz789 --output current-model.ttl
+# Translates to: flexo pull --org proj-remote-abc123 --repo default --remote production
+
+# 3. Make changes locally (edit current-model.ttl)
+
+# 4. Push changes back to remote
+flexo sysml push proj-local-xyz789 --message "Added new components" --input current-model.ttl
+# Translates to: flexo push --org proj-remote-abc123 --repo default --remote production
+
+# 5. Pull again to verify
+flexo sysml pull proj-local-xyz789 --output verified-model.ttl
+```
+
+**Requirements:**
+
+- Project must have a mapping (created via `clone` or `map add`)
+- Branch mapping is optional (commands will use mapped branch if available)
+- Flexo CLI must be installed and accessible in PATH
+- Remote must be configured in SysML config
 
 ### Remote Management Commands
 
@@ -153,11 +333,11 @@ All SysML commands automatically use the default remote, or you can specify a di
 flexo sysml project list
 
 # Use specific remote
-flexo sysml --remote production project list
-flexo sysml --remote staging project create --name "Test"
+flexo --remote production project list
+flexo --remote staging project create --name "Test"
 
 # The --remote flag works with any command
-flexo sysml --remote local element list --project PROJECT_ID --commit COMMIT_ID
+flexo --remote local element list --project PROJECT_ID --commit COMMIT_ID
 ```
 
 ### Project Mapping Commands
@@ -173,9 +353,16 @@ flexo sysml map ls           # Alias
 flexo sysml map add <local-project-id> <remote-name> <remote-project-id>
 flexo sysml map add my-local-proj staging proj-abc123
 
-# Show mapping details
+# Show mapping details by local project ID
 flexo sysml map show <local-project-id>
 flexo sysml map show my-local-proj
+
+# Look up local project ID from remote project ID (reverse lookup)
+flexo sysml map lookup <remote-project-id>
+flexo sysml map lookup proj-remote-xyz789
+
+# Look up with specific remote
+flexo sysml map lookup proj-remote-xyz789 --remote-name production
 
 # Remove a mapping
 flexo sysml map remove <local-project-id>
@@ -183,6 +370,38 @@ flexo sysml map rm my-local-proj     # Alias
 
 # Get help
 flexo sysml map --help
+```
+
+**Lookup Command Details:**
+
+The `lookup` command is useful when you only have a remote project ID and need to find the corresponding local project ID:
+
+```bash
+# Find local project ID from remote project ID
+$ flexo sysml map lookup proj-remote-abc123
+
+Found mapping:
+  Remote Project ID: proj-remote-abc123
+  Remote Name:       production
+  Local Project ID:  proj-local-xyz789
+
+You can use this local project ID with commands like:
+  flexo sysml project get --project proj-local-xyz789
+  flexo sysml element list --project proj-local-xyz789
+```
+
+If no mapping exists, the command provides helpful suggestions:
+
+```bash
+$ flexo sysml map lookup proj-unknown-123
+
+No mapping found for remote project: proj-unknown-123
+Remote: production
+
+Available options:
+  1. Clone the project: flexo --remote production clone proj-unknown-123
+  2. Create mapping: flexo sysml map add <local-project-id> production proj-unknown-123
+  3. List mappings: flexo sysml map list
 ```
 
 ### Branch Mapping Commands
@@ -297,13 +516,13 @@ All commands support standard Flexo CLI options plus plugin-specific options:
 
 ```bash
 # Use a specific remote
-flexo sysml --remote production project list
+flexo --remote production project list
 
 # Use project ID mapping (maps remote IDs to local IDs)
 flexo sysml --map-from project get --project remote-proj-id-123
 
 # Combine remote and mapping
-flexo sysml --remote staging --map-from element list --project remote-proj-id
+flexo --remote staging --map-from element list --project remote-proj-id
 
 # Verbose output
 flexo -v sysml project list
@@ -429,10 +648,10 @@ flexo sysml remote add prod https://prod.example.com
 flexo sysml project create --name "New Feature"
 
 # 3. Test in staging
-flexo sysml --remote staging project list
+flexo --remote staging project list
 
 # 4. Deploy to production
-flexo sysml --remote prod project list
+flexo --remote prod project list
 
 # 5. Switch default to staging for extended testing
 flexo sysml remote add staging https://staging.example.com --set-default
@@ -453,7 +672,7 @@ flexo sysml project list
 flexo sysml project create --name "Collaborative Model"
 
 # Individual testing with local instance
-flexo sysml --remote local project list
+flexo --remote local project list
 ```
 
 ### Project Synchronization Workflow
@@ -479,7 +698,7 @@ flexo sysml map add proj-local-abc123 staging proj-remote-xyz789
 flexo sysml branch list --project proj-local-abc123
 # Output: master (ID: local-master-guid-aaa)
 
-flexo sysml --remote staging branch list --project proj-remote-xyz789
+flexo --remote staging branch list --project proj-remote-xyz789
 # Output: master (ID: remote-master-guid-bbb)
 
 # 6. Create branch mapping
@@ -569,9 +788,44 @@ flexo-cli-sysmlv2-plugin/
 ## Requirements
 
 - Java 17 or higher
-- Flexo CLI 0.1.0 or higher
+- Flexo CLI 0.1.0 or higher  
+- **Flexo MMS Layer 1 service** running on port 8080 (required backend)
 - Docker (required for `flexo sysml init` command)
-- SysML v2 API service (can be deployed automatically via `flexo sysml init`)
+
+## Troubleshooting
+
+### "HTTP 500" error on project list
+
+**Issue**: `flexo sysml project list` returns HTTP 500 error
+
+**Cause**: The backend organization contains repositories with non-UUID IDs (e.g., "default", "localrepo"). The SysML v2 API requires all project IDs to be UUIDs per the standard specification.
+
+**Solution**: 
+- Use individual project operations (`get`, `update`, `delete`) which work correctly
+- Create a dedicated organization for SysML v2: `flexo init --org sysmlv2`
+- Projects created via `flexo sysml project create` will have UUID IDs and work correctly
+
+### Service fails to start
+
+**Issue**: SysML v2 service container fails to start or shows health check errors
+
+**Cause**: Missing or incorrect Flexo MMS backend connection
+
+**Solution**:
+1. Ensure Flexo MMS is running: `docker ps | grep layer1-service`
+2. If not running, initialize: `flexo init --org sysmlv2`
+3. Restart SysML v2 service: `docker restart sysmlv2-service`
+
+### "Connection refused" errors
+
+**Issue**: Commands fail with connection errors
+
+**Cause**: Either SysML v2 service or Flexo MMS backend is not running
+
+**Solution**:
+1. Check SysML v2 service: `docker ps | grep sysmlv2`
+2. Check Flexo MMS backend: `curl http://localhost:8080`
+3. Restart services if needed
 
 ## License
 

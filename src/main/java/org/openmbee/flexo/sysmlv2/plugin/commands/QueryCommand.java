@@ -12,7 +12,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 @Command(
     name = "query",
-    description = "Execute and manage queries"
+    description = "Execute and manage queries",
+    subcommands = {
+        QueryCommand.ListCommand.class
+    }
 )
 public class QueryCommand extends PluginCommand {
 

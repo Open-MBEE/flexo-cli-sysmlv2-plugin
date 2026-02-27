@@ -30,6 +30,7 @@ dependencies {
     // Testing
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
     testImplementation 'org.mockito:mockito-core:5.8.0'
+    testImplementation files('../flexo-cli-client/build/libs/flexo-cli-client-0.1.0.jar')
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 

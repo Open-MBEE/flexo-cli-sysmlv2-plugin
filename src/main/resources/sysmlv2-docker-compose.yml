@@ -10,11 +10,17 @@ services:
     image: openmbee/flexo-sysmlv2:v0.1.0
     hostname: sysmlv2-service
     container_name: sysmlv2-service
+    command: ["-port=9000"]
     ports:
       - "9000:9000"
     environment:
-      # Service configuration
-      - SERVER_PORT=9000
+      # Flexo backend configuration
+      - FLEXO_PROTOCOL=http
+      - FLEXO_HOST=host.docker.internal
+      - FLEXO_PORT=8080
+      - FLEXO_SYSMLV2_ORG=sysmlv2
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - sysmlv2-local
     restart: on-failure
@@ -30,6 +36,14 @@ networks:
 # 1. Extracts this compose file from the plugin JAR
 # 2. Starts the SysML v2 API service (port 9000)
 # 3. Updates the ~/.flexo/config with sysmlv2.url
+#
+# IMPORTANT: The SysML v2 service requires a Flexo MMS backend.
+# It connects to the backend at host.docker.internal:8080 and uses
+# the organization specified in FLEXO_SYSMLV2_ORG (default: sysmlv2).
+#
+# Before running 'flexo sysml init', ensure:
+# 1. Flexo MMS Layer 1 service is running on port 8080
+# 2. The organization 'sysmlv2' exists (create with: flexo init --org sysmlv2)
 #
 # Usage:
 #   flexo sysml init                # Automatic setup (recommended)

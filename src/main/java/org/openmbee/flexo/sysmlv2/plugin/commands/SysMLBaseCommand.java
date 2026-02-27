@@ -2,7 +2,6 @@ package org.openmbee.flexo.sysmlv2.plugin.commands;
 
 import org.openmbee.flexo.cli.plugin.PluginCommand;
 import org.openmbee.flexo.sysmlv2.plugin.config.SysMLConfigHelper;
-import picocli.CommandLine.ParentCommand;
 
 /**
  * Base class for SysML commands that need remote-aware URL resolution
@@ -10,16 +9,14 @@ import picocli.CommandLine.ParentCommand;
  */
 public abstract class SysMLBaseCommand extends PluginCommand {
     
-    @ParentCommand
-    private SysMLCommand parent;
-    
     /**
      * Get the SysML v2 API URL, resolving from remote if specified
      */
     protected String getSysMLUrl() {
         try {
             SysMLConfigHelper config = new SysMLConfigHelper();
-            String remoteName = parent != null ? parent.getRemoteName() : null;
+            // Get remote from global options via context
+            String remoteName = getConfig().get("sysmlv2.default.remote");
             return config.getRemoteUrl(remoteName);
         } catch (Exception e) {
             // Fallback to default
@@ -35,14 +32,21 @@ public abstract class SysMLBaseCommand extends PluginCommand {
      * Get the remote name if specified
      */
     protected String getRemoteName() {
-        return parent != null ? parent.getRemoteName() : null;
+        try {
+            return getConfig().get("sysmlv2.default.remote");
+        } catch (Exception e) {
+            return null;
+        }
     }
     
     /**
      * Check if project ID mapping should be used
+     * This would be set via a global flag which we'll implement later
      */
     protected boolean shouldMapProjectId() {
-        return parent != null && parent.isMapFrom();
+        // For now, always return false
+        // TODO: Implement --map-from flag handling
+        return false;
     }
     
     /**

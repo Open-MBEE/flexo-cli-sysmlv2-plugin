@@ -13,7 +13,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 @Command(
     name = "relationship",
-    description = "Query element relationships"
+    description = "Query element relationships",
+    subcommands = {
+        RelationshipCommand.ListCommand.class
+    }
 )
 public class RelationshipCommand extends PluginCommand {
 
@@ -22,7 +25,7 @@ public class RelationshipCommand extends PluginCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
-        @Option(names = {"--commit", "-c"}, description = "Commit ID (default: HEAD)")
+        @Option(names = {"--commit"}, description = "Commit ID (default: HEAD)")
         private String commitId = "HEAD";
 
         @Parameters(index = "0", description = "Element ID")

@@ -13,7 +13,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 @Command(
     name = "project",
-    description = "Manage SysML projects"
+    description = "Manage SysML projects",
+    subcommands = {
+        ProjectCommand.ListCommand.class,
+        ProjectCommand.GetCommand.class,
+        ProjectCommand.CreateCommand.class,
+        ProjectCommand.UpdateCommand.class,
+        ProjectCommand.DeleteCommand.class
+    }
 )
 public class ProjectCommand extends SysMLBaseCommand {
 

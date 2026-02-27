@@ -12,7 +12,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 @Command(
     name = "commit",
-    description = "Manage commits"
+    description = "Manage commits",
+    subcommands = {
+        CommitCommand.ListCommand.class
+    }
 )
 public class CommitCommand extends PluginCommand {
 
