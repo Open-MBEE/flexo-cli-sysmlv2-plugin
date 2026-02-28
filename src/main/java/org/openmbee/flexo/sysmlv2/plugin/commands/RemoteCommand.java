@@ -22,6 +22,7 @@ import java.util.Map;
                 RemoteCommand.RemoveCommand.class,
                 RemoteCommand.ListCommand.class,
                 RemoteCommand.SetUrlCommand.class,
+                RemoteCommand.SetFlexoRemoteCommand.class,
                 RemoteCommand.ShowCommand.class,
                 RemoteCommand.RenameCommand.class
         }
@@ -98,6 +99,9 @@ public class RemoteCommand extends PluginCommand {
         @Option(names = {"--set-default"}, description = "Set as default remote")
         private boolean setDefault;
 
+        @Option(names = {"--flexo-remote"}, description = "Name of Flexo backend remote to use for authentication")
+        private String flexoRemote;
+
         @Override
         public void run() {
             try {
@@ -110,8 +114,13 @@ public class RemoteCommand extends PluginCommand {
                     throw new RuntimeException("Remote '" + name + "' already exists");
                 }
 
+                // Validate Flexo remote exists if specified
+                if (flexoRemote != null) {
+                    validateFlexoRemote(flexoRemote);
+                }
+
                 // Create and configure remote
-                SysMLRemote remote = new SysMLRemote(name, url);
+                SysMLRemote remote = new SysMLRemote(name, url, flexoRemote);
                 config.setRemote(remote);
 
                 // Set as default if requested
@@ -121,6 +130,9 @@ public class RemoteCommand extends PluginCommand {
 
                 config.save();
                 success("Remote '" + name + "' added: " + url);
+                if (flexoRemote != null) {
+                    info("Linked to Flexo backend remote: " + flexoRemote);
+                }
                 if (setDefault) {
                     info("Set as default remote");
                 }
@@ -213,6 +225,60 @@ public class RemoteCommand extends PluginCommand {
     }
 
     /**
+     * Set Flexo backend remote for a SysML v2 remote
+     */
+    @Command(
+            name = "set-flexo-remote",
+            description = "Set or update the Flexo backend remote for authentication",
+            mixinStandardHelpOptions = true
+    )
+    static class SetFlexoRemoteCommand extends PluginCommand {
+        @Parameters(index = "0", description = "SysML v2 remote name")
+        private String name;
+
+        @Parameters(index = "1", description = "Flexo backend remote name (use 'none' to unset)")
+        private String flexoRemote;
+
+        @Override
+        public void run() {
+            try {
+                SysMLConfigHelper config = new SysMLConfigHelper();
+
+                if (!config.hasRemote(name)) {
+                    error("Remote '" + name + "' does not exist");
+                    info("Use 'flexo sysml remote add " + name + " <url>' to add it");
+                    throw new RuntimeException("Remote '" + name + "' does not exist");
+                }
+
+                SysMLRemote remote = config.getRemote(name);
+                
+                // Handle unsetting
+                if ("none".equalsIgnoreCase(flexoRemote)) {
+                    remote.setFlexoRemote(null);
+                    config.setRemote(remote);
+                    config.save();
+                    success("Flexo backend remote unset for '" + name + "'");
+                    info("Will use default Flexo backend configuration");
+                } else {
+                    // Validate Flexo remote exists
+                    validateFlexoRemote(flexoRemote);
+                    
+                    remote.setFlexoRemote(flexoRemote);
+                    config.setRemote(remote);
+                    config.save();
+                    success("Remote '" + name + "' now uses Flexo backend remote: " + flexoRemote);
+                }
+            } catch (Exception e) {
+                error("Failed to update Flexo backend remote: " + e.getMessage());
+                if (isVerbose()) {
+                    e.printStackTrace();
+                }
+                throw new RuntimeException("Failed to update Flexo backend remote", e);
+            }
+        }
+    }
+
+    /**
      * Show details about a remote
      */
     @Command(
@@ -241,6 +307,9 @@ public class RemoteCommand extends PluginCommand {
 
                 info("Remote: " + remote.getName() + (isDefault ? " (default)" : ""));
                 info("  URL: " + remote.getUrl());
+                if (remote.getFlexoRemote() != null) {
+                    info("  Flexo Backend: " + remote.getFlexoRemote());
+                }
             } catch (Exception e) {
                 error("Failed to show remote: " + e.getMessage());
                 if (isVerbose()) {
@@ -292,6 +361,26 @@ public class RemoteCommand extends PluginCommand {
                 }
                 throw new RuntimeException("Failed to rename remote", e);
             }
+        }
+    }
+
+    /**
+     * Validate that a Flexo backend remote exists in the configuration
+     */
+    private static void validateFlexoRemote(String flexoRemoteName) {
+        try {
+            // Access the parent Flexo CLI configuration to check if the remote exists
+            org.openmbee.flexo.cli.config.FlexoConfig flexoConfig = new org.openmbee.flexo.cli.config.FlexoConfig();
+            String remoteUrl = flexoConfig.getRemoteUrl(flexoRemoteName);
+            
+            if (remoteUrl == null) {
+                throw new IllegalArgumentException(
+                    "Flexo backend remote '" + flexoRemoteName + "' does not exist.\n" +
+                    "Add it first with: flexo remote add " + flexoRemoteName + " <url>"
+                );
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to validate Flexo backend remote: " + e.getMessage(), e);
         }
     }
 }

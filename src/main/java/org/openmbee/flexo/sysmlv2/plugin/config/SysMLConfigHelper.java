@@ -57,6 +57,7 @@ public class SysMLConfigHelper {
             SysMLRemote remote = new SysMLRemote();
             remote.setName(name);
             remote.setUrl(properties.getProperty(REMOTE_PREFIX + name + ".url"));
+            remote.setFlexoRemote(properties.getProperty(REMOTE_PREFIX + name + ".flexoRemote"));
             remotes.put(name, remote);
         }
         
@@ -75,6 +76,7 @@ public class SysMLConfigHelper {
         SysMLRemote remote = new SysMLRemote();
         remote.setName(name);
         remote.setUrl(url);
+        remote.setFlexoRemote(properties.getProperty(REMOTE_PREFIX + name + ".flexoRemote"));
         return remote;
     }
     
@@ -83,6 +85,9 @@ public class SysMLConfigHelper {
      */
     public void setRemote(SysMLRemote remote) {
         properties.setProperty(REMOTE_PREFIX + remote.getName() + ".url", remote.getUrl());
+        if (remote.getFlexoRemote() != null) {
+            properties.setProperty(REMOTE_PREFIX + remote.getName() + ".flexoRemote", remote.getFlexoRemote());
+        }
     }
     
     /**

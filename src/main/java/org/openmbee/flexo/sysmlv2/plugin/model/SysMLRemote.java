@@ -9,6 +9,7 @@ import java.util.Objects;
 public class SysMLRemote {
     private String name;
     private String url;
+    private String flexoRemote;  // Name of the Flexo backend remote to use for authentication
 
     public SysMLRemote() {
     }
@@ -16,6 +17,12 @@ public class SysMLRemote {
     public SysMLRemote(String name, String url) {
         this.name = name;
         this.url = url;
+    }
+
+    public SysMLRemote(String name, String url, String flexoRemote) {
+        this.name = name;
+        this.url = url;
+        this.flexoRemote = flexoRemote;
     }
 
     public String getName() {
@@ -32,6 +39,14 @@ public class SysMLRemote {
 
     public void setUrl(String url) {
         this.url = url;
+    }
+
+    public String getFlexoRemote() {
+        return flexoRemote;
+    }
+
+    public void setFlexoRemote(String flexoRemote) {
+        this.flexoRemote = flexoRemote;
     }
 
     @Override

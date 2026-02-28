@@ -58,6 +58,9 @@ public class InitCommand extends PluginCommand {
     @Option(names = {"--set-default"}, description = "Set as default remote (default: true)")
     private boolean setDefault = true;
 
+    @Option(names = {"--flexo-remote"}, description = "Name of Flexo backend remote to use for authentication")
+    private String flexoRemote;
+
     @Override
     public void run() {
         info("Initializing SysML v2 API service...");
@@ -341,15 +344,23 @@ public class InitCommand extends PluginCommand {
     private void createOrUpdateRemote() throws Exception {
         SysMLConfigHelper config = new SysMLConfigHelper();
         
+        // Validate Flexo remote if specified
+        if (flexoRemote != null) {
+            validateFlexoRemote(flexoRemote);
+        }
+        
         // Check if remote exists
         if (config.hasRemote(remoteName)) {
-            info("  Remote '" + remoteName + "' already exists, updating URL...");
+            info("  Remote '" + remoteName + "' already exists, updating...");
             SysMLRemote remote = config.getRemote(remoteName);
             remote.setUrl(sysmlv2Url);
+            if (flexoRemote != null) {
+                remote.setFlexoRemote(flexoRemote);
+            }
             config.setRemote(remote);
         } else {
             info("  Creating remote '" + remoteName + "'...");
-            SysMLRemote remote = new SysMLRemote(remoteName, sysmlv2Url);
+            SysMLRemote remote = new SysMLRemote(remoteName, sysmlv2Url, flexoRemote);
             config.setRemote(remote);
         }
         
@@ -360,5 +371,24 @@ public class InitCommand extends PluginCommand {
         
         config.save();
         success("  Remote '" + remoteName + "' configured");
+    }
+
+    /**
+     * Validate that a Flexo backend remote exists in the configuration
+     */
+    private void validateFlexoRemote(String flexoRemoteName) {
+        try {
+            org.openmbee.flexo.cli.config.FlexoConfig flexoConfig = getConfig();
+            String remoteUrl = flexoConfig.getRemoteUrl(flexoRemoteName);
+            
+            if (remoteUrl == null) {
+                throw new IllegalArgumentException(
+                    "Flexo backend remote '" + flexoRemoteName + "' does not exist.\n" +
+                    "Add it first with: flexo remote add " + flexoRemoteName + " <url>"
+                );
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to validate Flexo backend remote: " + e.getMessage(), e);
+        }
     }
 }
