@@ -24,28 +24,17 @@ public class BranchCommand extends SysMLBaseCommand {
 
     @Command(name = "list", description = "List branches in a project")
     public static class ListCommand extends SysMLBaseCommand {
-        @Option(names = {"--project", "-p"}, required = true, description = "Project ID (use --map-from to provide remote ID)")
+        @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
         @Override
         public void run() {
             try {
                 String url = getSysMLUrl();
-                
-                // Map project ID if --map-from is specified
-                String actualProjectId = mapProjectId(projectId);
-                if (!actualProjectId.equals(projectId)) {
-                    info("Using mapped local project ID: " + actualProjectId);
-                }
-                
-                debug("Listing branches for project: " + actualProjectId);
+                debug("Using SysML v2 API at: " + url);
 
-                SysMLv2Client client = new SysMLv2Client(
-                    url,
-                    getClient()
-                );
-
-                String response = client.getBranches(actualProjectId);
+                SysMLv2Client client = new SysMLv2Client(url, getClient());
+                String response = client.getBranches(projectId);
 
                 ObjectMapper mapper = new ObjectMapper();
                 JsonNode root = mapper.readTree(response);
@@ -73,7 +62,7 @@ public class BranchCommand extends SysMLBaseCommand {
 
     @Command(name = "get", description = "Get branch details by ID")
     public static class GetCommand extends SysMLBaseCommand {
-        @Option(names = {"--project", "-p"}, required = true, description = "Project ID (use --map-from to provide remote ID)")
+        @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
         @Option(names = {"--branch", "-b"}, required = true, description = "Branch ID")
@@ -83,16 +72,12 @@ public class BranchCommand extends SysMLBaseCommand {
         public void run() {
             try {
                 String url = getSysMLUrl();
-                
-                String actualProjectId = mapProjectId(projectId);
-                if (!actualProjectId.equals(projectId)) {
-                    info("Using mapped local project ID: " + actualProjectId);
-                }
+                debug("Using SysML v2 API at: " + url);
                 
                 debug("Getting branch: " + branchId);
 
                 SysMLv2Client client = new SysMLv2Client(url, getClient());
-                String response = client.getBranch(actualProjectId, branchId);
+                String response = client.getBranch(projectId, branchId);
 
                 ObjectMapper mapper = new ObjectMapper();
                 JsonNode branch = mapper.readTree(response);
@@ -124,7 +109,7 @@ public class BranchCommand extends SysMLBaseCommand {
 
     @Command(name = "create", description = "Create a new branch")
     public static class CreateCommand extends SysMLBaseCommand {
-        @Option(names = {"--project", "-p"}, required = true, description = "Project ID (use --map-from to provide remote ID)")
+        @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
         @Option(names = {"--name", "-n"}, required = true, description = "Branch name")
@@ -138,15 +123,10 @@ public class BranchCommand extends SysMLBaseCommand {
             try {
                 String url = getSysMLUrl();
                 
-                String actualProjectId = mapProjectId(projectId);
-                if (!actualProjectId.equals(projectId)) {
-                    info("Using mapped local project ID: " + actualProjectId);
-                }
-                
                 debug("Creating branch: " + name);
 
                 SysMLv2Client client = new SysMLv2Client(url, getClient());
-                String response = client.createBranch(actualProjectId, name, description);
+                String response = client.createBranch(projectId, name, description);
 
                 ObjectMapper mapper = new ObjectMapper();
                 JsonNode branch = mapper.readTree(response);
@@ -173,7 +153,7 @@ public class BranchCommand extends SysMLBaseCommand {
 
     @Command(name = "delete", description = "Delete a branch")
     public static class DeleteCommand extends SysMLBaseCommand {
-        @Option(names = {"--project", "-p"}, required = true, description = "Project ID (use --map-from to provide remote ID)")
+        @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
         @Option(names = {"--branch", "-b"}, required = true, description = "Branch ID")
@@ -184,15 +164,10 @@ public class BranchCommand extends SysMLBaseCommand {
             try {
                 String url = getSysMLUrl();
                 
-                String actualProjectId = mapProjectId(projectId);
-                if (!actualProjectId.equals(projectId)) {
-                    info("Using mapped local project ID: " + actualProjectId);
-                }
-                
                 debug("Deleting branch: " + branchId);
 
                 SysMLv2Client client = new SysMLv2Client(url, getClient());
-                client.deleteBranch(actualProjectId, branchId);
+                client.deleteBranch(projectId, branchId);
 
                 success("Branch deleted: " + branchId);
 

@@ -26,7 +26,7 @@ public class ElementCommand extends SysMLBaseCommand {
 
     @Command(name = "list", description = "List elements in a project/commit")
     public static class ListCommand extends SysMLBaseCommand {
-        @Option(names = {"--project", "-p"}, required = true, description = "Project ID (use --map-from to provide remote ID)")
+        @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
         @Option(names = {"--commit"}, description = "Commit ID (default: HEAD)")
@@ -46,13 +46,7 @@ public class ElementCommand extends SysMLBaseCommand {
             try {
                 String url = getSysMLUrl();
                 
-                // Map project ID if --map-from is specified
-                String actualProjectId = mapProjectId(projectId);
-                if (!actualProjectId.equals(projectId)) {
-                    info("Using mapped local project ID: " + actualProjectId);
-                }
-                
-                debug("Listing elements (project=" + actualProjectId + ", commit=" + commitId + ")");
+                debug("Listing elements (project=" + projectId + ", commit=" + commitId + ")");
 
                 SysMLv2Client client = new SysMLv2Client(
                     url,
@@ -60,7 +54,7 @@ public class ElementCommand extends SysMLBaseCommand {
                 );
 
                 // Use new API with excludeUsed parameter
-                String response = client.getElements(actualProjectId, commitId, 
+                String response = client.getElements(projectId, commitId, 
                     excludeUsed ? Boolean.TRUE : null, null, null, size > 0 ? size : null);
 
                 // Parse and display elements

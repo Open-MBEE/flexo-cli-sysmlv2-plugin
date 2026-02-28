@@ -30,9 +30,6 @@ import picocli.CommandLine.Option;
 )
 public class SysMLCommand extends PluginCommand {
     
-    @Option(names = {"--map-from"}, description = "Map remote project ID to local project ID using configured mappings", scope = picocli.CommandLine.ScopeType.INHERIT)
-    private boolean mapFrom = false;
-    
     @Override
     public void run() {
         info("SysML v2 Plugin for Flexo CLI");
@@ -54,6 +51,5 @@ public class SysMLCommand extends PluginCommand {
         info("");
         info("Use 'flexo sysml <command> --help' for more information");
         info("Use 'flexo --remote <name> sysml <command>' to use a specific remote");
-        info("Use 'flexo sysml --map-from <command>' to map remote project IDs to local");
     }
 }
