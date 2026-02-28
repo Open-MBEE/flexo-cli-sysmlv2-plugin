@@ -395,24 +395,6 @@ public class SysMLConfigHelper {
     }
     
     /**
-     * Remove all branch mappings for a project
-     */
-    public void removeAllBranchMappings(String localProjectId) {
-        String prefix = MAPPING_PREFIX + localProjectId + ".branch.";
-        List<String> keysToRemove = new ArrayList<>();
-        
-        for (String key : properties.stringPropertyNames()) {
-            if (key.startsWith(prefix)) {
-                keysToRemove.add(key);
-            }
-        }
-        
-        for (String key : keysToRemove) {
-            properties.remove(key);
-        }
-    }
-    
-    /**
      * Check if a branch mapping exists
      */
     public boolean hasBranchMapping(String localProjectId, String localBranchId) {
