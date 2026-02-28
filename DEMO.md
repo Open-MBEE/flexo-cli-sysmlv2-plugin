@@ -558,19 +558,74 @@ flexo sysml element roots \
 ### 8.1 List Branches
 
 ```bash
-# List branches in project
-flexo sysml branch list --project proj-12345-abc-67890
+# List branches in project (using project ID from Phase 3)
+flexo sysml branch list --project 3a912c13-a609-4954-909d-b773be7edb0f
 
 # On specific remote
 flexo --remote production branch list \
     --project proj-prod-abc123
+
+# With verbose output to see authentication details
+flexo sysml -v branch list --project 3a912c13-a609-4954-909d-b773be7edb0f
 ```
 
 Expected output:
 ```
-Branches in project proj-12345-abc-67890:
-  master (branch-abc-123) - HEAD: commit-xyz-456
-  feature-xyz (branch-def-456) - HEAD: commit-abc-789
+Branches:
+  Initial (ID: 88299563-581f-45e0-978a-99b5a70b5d2b)
+```
+
+**Note**: The SysML v2 API creates an "Initial" branch automatically when a project is created. Branch creation via API is not currently supported in the SysML v2 standard - branches are managed through commits and project operations.
+
+### 8.2 View Branch Details with Commits
+
+To see more details about a branch, list its commits:
+
+```bash
+# List commits on a specific branch
+flexo sysml commit list \
+    --project 3a912c13-a609-4954-909d-b773be7edb0f \
+    --branch Initial
+```
+
+### 8.3 Branch Usage in Pull/Push Operations
+
+Branches are primarily used when pulling and pushing model data:
+
+```bash
+# Pull from specific branch (will be covered in Phase 6)
+flexo sysml pull proj-local-xyz789 \
+    --branch local-main-guid \
+    --output model.ttl
+
+# Push to specific branch
+flexo sysml push proj-local-xyz789 \
+    --branch local-main-guid \
+    --message "Update main branch" \
+    --input updated-model.ttl
+```
+
+### 8.4 Branch Mapping for Multi-Environment Workflows
+
+When cloning projects, branch mappings are automatically created to track which local branch corresponds to which remote branch:
+
+```bash
+# View branch mappings for a project
+flexo sysml map list-branches proj-local-xyz789
+
+# Manually add branch mapping (if needed)
+flexo sysml map add-branch proj-local-xyz789 \
+    local-branch-id \
+    remote-branch-id
+```
+
+Expected output:
+```
+Branch mappings for project proj-local-xyz789:
+
+Local Branch ID           Remote Branch ID
+---                       ---
+local-branch-abc          remote-branch-xyz
 ```
 
 ---

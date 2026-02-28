@@ -27,17 +27,19 @@ Client → SysML v2 API (port 9000) → Flexo MMS Layer 1 (port 8080) → Triple
 This plugin provides comprehensive access to SysML v2 API operations:
 
 - **Remote Management** - Manage multiple SysML v2 servers (similar to git remotes)
+- **Authentication Mapping** - Link each SysML v2 remote to a Flexo backend remote for environment-specific authentication
 - **Local Deployment** - Automatically deploy a local SysML v2 API service via Docker
 - **Project Cloning** - Clone complete projects from remote to local with automatic mapping
 - **Pull & Push** - Sync models between local and remote using mapped project/branch IDs
 - **Project Management** - Create, list, update, and delete projects
 - **Element Operations** - Query and retrieve elements, get root elements
-- **Branch Management** - List and manage project branches
+- **Branch Management** - List project branches (automatic "Initial" branch creation)
 - **Commit Operations** - View commit history
 - **Query Execution** - Execute and manage queries
 - **Tag Management** - List and manage tags
 - **Relationship Navigation** - Query element relationships
 - **Project & Branch Mapping** - Map local project/branch IDs to remote IDs for seamless workflows
+
 
 ## Installation
 
@@ -304,13 +306,29 @@ flexo sysml remote add <name> <url>
 flexo sysml remote add staging https://sysml-staging.example.com
 flexo sysml remote add production https://sysml.example.com --set-default
 
-# Show remote details
+# Add remote with Flexo backend authentication mapping
+flexo sysml remote add production https://sysml.example.com \
+    --flexo-remote flexo-prod \
+    --set-default
+
+# Show remote details (including Flexo backend mapping)
 flexo sysml remote show <name>
 flexo sysml remote show production
+# Output:
+# Remote: production (default)
+#   URL: https://sysml.example.com
+#   Flexo Backend: flexo-prod
 
 # Change remote URL
 flexo sysml remote set-url <name> <new-url>
 flexo sysml remote set-url staging https://new-staging.example.com
+
+# Set or update Flexo backend remote for authentication
+flexo sysml remote set-flexo-remote <name> <flexo-remote-name>
+flexo sysml remote set-flexo-remote production flexo-prod
+
+# Remove Flexo backend mapping
+flexo sysml remote set-flexo-remote production none
 
 # Rename a remote
 flexo sysml remote rename <old-name> <new-name>
@@ -323,6 +341,58 @@ flexo sysml remote rm <name>          # Alias
 # Get help
 flexo sysml remote --help
 ```
+
+### Flexo Backend Authentication Mapping
+
+Each SysML v2 remote can be linked to a specific Flexo backend remote for authentication. This enables multi-environment workflows where each environment uses different credentials:
+
+```bash
+# 1. First, configure your Flexo backend remotes
+flexo remote add flexo-local http://localhost:8080 --local-mode=true
+flexo remote add flexo-prod https://flexo-backend.example.com \
+    --local-mode=false \
+    --auth-enabled=true \
+    --ssh-key-path=~/.ssh/prod_rsa
+
+# 2. Link SysML v2 remotes to Flexo backend remotes
+flexo sysml remote add origin http://localhost:9000 --flexo-remote flexo-local
+flexo sysml remote add production https://sysml-api.example.com --flexo-remote flexo-prod
+
+# 3. Commands now use the correct authentication automatically
+flexo sysml project list                    # Uses flexo-local auth
+flexo --remote production project list      # Uses flexo-prod auth
+
+# 4. Verify with verbose output
+flexo sysml -v project list
+# Shows: "Using Flexo backend remote 'flexo-local' for authentication"
+```
+
+**Configuration in `~/.flexo/config`:**
+```properties
+# Flexo backend remotes
+remote.flexo-local.url=http://localhost:8080
+remote.flexo-local.localMode=true
+
+remote.flexo-prod.url=https://flexo-backend.example.com
+remote.flexo-prod.localMode=false
+remote.flexo-prod.authEnabled=true
+remote.flexo-prod.sshKeyPath=~/.ssh/prod_rsa
+
+# SysML v2 remotes with Flexo backend mappings
+sysmlv2.remote.origin.url=http://localhost:9000
+sysmlv2.remote.origin.flexoRemote=flexo-local
+
+sysmlv2.remote.production.url=https://sysml-api.example.com
+sysmlv2.remote.production.flexoRemote=flexo-prod
+```
+
+**Benefits:**
+- Different authentication per environment (local dev vs staging vs production)
+- Automatic credential selection based on which SysML v2 remote you're using
+- No need to manually switch authentication settings
+- Supports both local development mode and SSH key authentication
+
+
 
 ### Using Remotes with Commands
 
@@ -477,9 +547,45 @@ flexo sysml element roots --project PROJECT_ID --commit COMMIT_ID
 
 ### Branch Commands
 
+The SysML v2 API automatically creates an "Initial" branch when a project is created. Branch operations are primarily read-only through the API.
+
 ```bash
 # List branches in a project
 flexo sysml branch list --project PROJECT_ID
+
+# List branches on a specific remote
+flexo --remote production branch list --project PROJECT_ID
+
+# List branches with verbose output (shows authentication details)
+flexo sysml -v branch list --project PROJECT_ID
+
+# Example output:
+# Branches:
+#   Initial (ID: 88299563-581f-45e0-978a-99b5a70b5d2b)
+```
+
+**Note**: Branch creation via the SysML v2 API is not currently supported in the standard. Branches are managed through the underlying Flexo MMS backend and commit operations. When you create a project, an "Initial" branch is automatically created.
+
+**Working with Branch IDs**: Branch IDs are UUIDs and are needed for:
+- Pull/push operations with `--branch` flag
+- Creating branch mappings for synchronized workflows
+- Querying commits on specific branches
+
+**Example**: Get branch ID for mapping:
+```bash
+# List branches to get their IDs
+flexo sysml branch list --project proj-local-abc123
+# Output: Initial (ID: 88299563-581f-45e0-978a-99b5a70b5d2b)
+
+# Use this ID in branch mappings
+flexo sysml map add-branch proj-local-abc123 \
+    88299563-581f-45e0-978a-99b5a70b5d2b \
+    remote-branch-guid-xyz
+
+# Use in pull/push operations
+flexo sysml pull proj-local-abc123 \
+    --branch 88299563-581f-45e0-978a-99b5a70b5d2b \
+    --output model.ttl
 ```
 
 ### Commit Commands
@@ -599,24 +705,30 @@ For backward compatibility, the plugin also supports the legacy `sysmlv2.url` pr
 
 The plugin maps to the following SysML v2 API endpoints:
 
-| Command | HTTP Method | Endpoint |
-|---------|-------------|----------|
-| `init` | - | Starts local Docker service & creates remote |
-| `remote list/add/remove/...` | - | Manages remote configurations |
-| `map list/add/remove/show` | - | Manages project mappings (config only) |
-| `project list` | GET | `/projects` |
-| `project get` | GET | `/projects/{id}` |
-| `project create` | POST | `/projects` |
-| `project update` | PUT | `/projects/{id}` |
-| `project delete` | DELETE | `/projects/{id}` |
-| `element list` | GET | `/projects/{id}/commits/{commit}/elements` |
-| `element get` | GET | `/projects/{id}/commits/{commit}/elements/{elementId}` |
-| `element roots` | GET | `/projects/{id}/commits/{commit}/elements/roots` |
-| `branch list` | GET | `/projects/{id}/branches` |
-| `commit list` | GET | `/projects/{id}/commits` |
-| `query list` | GET | `/projects/{id}/queries` |
-| `tag list` | GET | `/projects/{id}/tags` |
-| `relationship list` | GET | `/projects/{id}/commits/{commit}/elements/{elementId}/relationships` |
+| Command | HTTP Method | Endpoint | Notes |
+|---------|-------------|----------|-------|
+| `init` | - | Starts local Docker service & creates remote | - |
+| `remote list/add/remove/...` | - | Manages remote configurations | Config only |
+| `remote set-flexo-remote` | - | Maps SysML v2 remote to Flexo backend remote | Config only |
+| `map list/add/remove/show` | - | Manages project mappings | Config only |
+| `map list-branches/add-branch/...` | - | Manages branch mappings | Config only |
+| `project list` | GET | `/projects` | May fail if backend has non-UUID repos |
+| `project get` | GET | `/projects/{id}` | - |
+| `project create` | POST | `/projects` | Creates with UUID ID |
+| `project update` | PUT | `/projects/{id}` | - |
+| `project delete` | DELETE | `/projects/{id}` | - |
+| `element list` | GET | `/projects/{id}/commits/{commit}/elements` | - |
+| `element get` | GET | `/projects/{id}/commits/{commit}/elements/{elementId}` | - |
+| `element roots` | GET | `/projects/{id}/commits/{commit}/elements/roots` | - |
+| `branch list` | GET | `/projects/{id}/branches` | Shows "Initial" branch auto-created |
+| `commit list` | GET | `/projects/{id}/commits` | Optional `?branch=` parameter |
+| `query list` | GET | `/projects/{id}/queries` | - |
+| `tag list` | GET | `/projects/{id}/tags` | - |
+| `relationship list` | GET | `/projects/{id}/commits/{commit}/elements/{elementId}/relationships` | - |
+| `clone` | Multiple | Multiple API calls | Clones project + branches + elements |
+| `pull` | - | Delegates to `flexo pull` | Uses project/branch mappings |
+| `push` | - | Delegates to `flexo push` | Uses project/branch mappings |
+
 
 ## Example Workflows
 
