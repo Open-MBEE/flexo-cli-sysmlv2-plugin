@@ -24,13 +24,17 @@ public class CommitCommand extends PluginCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
-        @Option(names = {"--branch", "-b"}, description = "Branch name")
+        @Option(names = {"--branch", "-b"}, description = "Branch name (NOTE: This parameter is ignored - the SysML v2 API does not support filtering commits by branch)", hidden = true)
         private String branch;
 
         @Override
         public void run() {
             try {
                 debug("Listing commits for project: " + projectId);
+                
+                if (branch != null && !branch.isEmpty()) {
+                    warn("Note: --branch parameter is ignored. The SysML v2 API does not support filtering commits by branch.");
+                }
 
                 SysMLv2Client client = new SysMLv2Client(
                     getConfig().getMmsUrl(),

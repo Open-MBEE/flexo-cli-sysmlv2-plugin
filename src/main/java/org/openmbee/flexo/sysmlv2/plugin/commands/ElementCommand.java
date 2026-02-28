@@ -37,6 +37,9 @@ public class ElementCommand extends SysMLBaseCommand {
 
         @Option(names = {"--size"}, description = "Page size (default: 20)")
         private int size = 20;
+        
+        @Option(names = {"--exclude-used"}, description = "Exclude elements from ProjectUsages")
+        private boolean excludeUsed = false;
 
         @Override
         public void run() {
@@ -56,7 +59,9 @@ public class ElementCommand extends SysMLBaseCommand {
                     getClient()
                 );
 
-                String response = client.getElements(actualProjectId, commitId, page, size);
+                // Use new API with excludeUsed parameter
+                String response = client.getElements(actualProjectId, commitId, 
+                    excludeUsed ? Boolean.TRUE : null, null, null, size > 0 ? size : null);
 
                 // Parse and display elements
                 ObjectMapper mapper = new ObjectMapper();
@@ -99,6 +104,9 @@ public class ElementCommand extends SysMLBaseCommand {
 
         @Parameters(index = "0", description = "Element ID")
         private String elementId;
+        
+        @Option(names = {"--exclude-used"}, description = "Exclude elements from ProjectUsages")
+        private boolean excludeUsed = false;
 
         @Override
         public void run() {
@@ -110,7 +118,9 @@ public class ElementCommand extends SysMLBaseCommand {
                     getClient()
                 );
 
-                String response = client.getElement(projectId, commitId, elementId);
+                // Use new API with excludeUsed parameter
+                String response = client.getElement(projectId, commitId, elementId, 
+                    excludeUsed ? Boolean.TRUE : null);
 
                 // Parse and display element details
                 ObjectMapper mapper = new ObjectMapper();
@@ -151,6 +161,9 @@ public class ElementCommand extends SysMLBaseCommand {
 
         @Option(names = {"--commit"}, description = "Commit ID (default: HEAD)")
         private String commitId = "HEAD";
+        
+        @Option(names = {"--exclude-used"}, description = "Exclude elements from ProjectUsages")
+        private boolean excludeUsed = false;
 
         @Override
         public void run() {
@@ -162,7 +175,9 @@ public class ElementCommand extends SysMLBaseCommand {
                     getClient()
                 );
 
-                String response = client.getRootElements(projectId, commitId);
+                // Use new API with excludeUsed parameter
+                String response = client.getRootElements(projectId, commitId, 
+                    excludeUsed ? Boolean.TRUE : null, null, null, null);
 
                 // Parse and display root elements
                 ObjectMapper mapper = new ObjectMapper();

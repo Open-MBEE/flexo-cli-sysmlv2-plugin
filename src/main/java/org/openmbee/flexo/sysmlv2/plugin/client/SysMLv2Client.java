@@ -410,6 +410,66 @@ public class SysMLv2Client {
     public String getBranches(String projectId) throws IOException {
         return getBranches(projectId, null, null, null);
     }
+    
+    /**
+     * Get branch by ID
+     * 
+     * @param projectId Project UUID
+     * @param branchId Branch UUID
+     * @return JSON response with branch details
+     */
+    public String getBranch(String projectId, String branchId) throws IOException {
+        String url = baseUrl + "/projects/" + projectId + "/branches/" + branchId;
+        HttpGet request = new HttpGet(url);
+        addAuthHeader(request);
+        request.setHeader("Accept", "application/json");
+        
+        return executeRequest(request);
+    }
+    
+    /**
+     * Create a new branch
+     * 
+     * @param projectId Project UUID
+     * @param name Branch name
+     * @param description Branch description (optional)
+     * @return JSON response with created branch
+     */
+    public String createBranch(String projectId, String name, String description) throws IOException {
+        String url = baseUrl + "/projects/" + projectId + "/branches";
+        
+        // Build JSON body
+        StringBuilder jsonBody = new StringBuilder();
+        jsonBody.append("{");
+        jsonBody.append("\"@type\":\"Branch\"");
+        jsonBody.append(",\"name\":\"").append(escapeJson(name)).append("\"");
+        if (description != null && !description.isEmpty()) {
+            jsonBody.append(",\"description\":\"").append(escapeJson(description)).append("\"");
+        }
+        jsonBody.append("}");
+        
+        HttpPost request = new HttpPost(url);
+        addAuthHeader(request);
+        request.setHeader("Content-Type", "application/json");
+        request.setHeader("Accept", "application/json");
+        request.setEntity(new StringEntity(jsonBody.toString(), ContentType.APPLICATION_JSON));
+        
+        return executeRequest(request);
+    }
+    
+    /**
+     * Delete a branch
+     * 
+     * @param projectId Project UUID
+     * @param branchId Branch UUID
+     */
+    public void deleteBranch(String projectId, String branchId) throws IOException {
+        String url = baseUrl + "/projects/" + projectId + "/branches/" + branchId;
+        HttpDelete request = new HttpDelete(url);
+        addAuthHeader(request);
+        
+        executeRequest(request);
+    }
 
     // ============ Commit Operations ============
 
@@ -499,6 +559,69 @@ public class SysMLv2Client {
      */
     public String getQueries(String projectId) throws IOException {
         return getQueries(projectId, null, null, null);
+    }
+    
+    /**
+     * Get query by ID
+     * 
+     * @param projectId Project UUID
+     * @param queryId Query UUID
+     * @return JSON response with query details
+     */
+    public String getQuery(String projectId, String queryId) throws IOException {
+        String url = baseUrl + "/projects/" + projectId + "/queries/" + queryId;
+        HttpGet request = new HttpGet(url);
+        addAuthHeader(request);
+        request.setHeader("Accept", "application/json");
+        
+        return executeRequest(request);
+    }
+    
+    /**
+     * Execute a query and get results at a specific commit
+     * 
+     * @param projectId Project UUID
+     * @param queryId Query UUID
+     * @param commitId Commit UUID (optional, defaults to HEAD of default branch)
+     * @param pageAfter Cursor for next page (optional)
+     * @param pageBefore Cursor for previous page (optional)
+     * @param pageSize Number of items per page (optional)
+     * @return JSON response with query results (array of Data elements)
+     */
+    public String getQueryResults(String projectId, String queryId, String commitId,
+                                  String pageAfter, String pageBefore, Integer pageSize) throws IOException {
+        String url = baseUrl + "/projects/" + projectId + "/queries/" + queryId + "/results";
+        List<String> params = new ArrayList<>();
+        
+        if (commitId != null && !commitId.isEmpty()) {
+            params.add("commitId=" + commitId);
+        }
+        if (pageAfter != null && !pageAfter.isEmpty()) {
+            params.add("page[after]=" + URLEncoder.encode(pageAfter, StandardCharsets.UTF_8));
+        }
+        if (pageBefore != null && !pageBefore.isEmpty()) {
+            params.add("page[before]=" + URLEncoder.encode(pageBefore, StandardCharsets.UTF_8));
+        }
+        if (pageSize != null && pageSize > 0) {
+            params.add("page[size]=" + pageSize);
+        }
+        
+        if (!params.isEmpty()) {
+            url += "?" + String.join("&", params);
+        }
+        
+        HttpGet request = new HttpGet(url);
+        addAuthHeader(request);
+        request.setHeader("Accept", "application/json");
+        
+        return executeRequest(request);
+    }
+    
+    /**
+     * Execute a query and get results (convenience method, uses HEAD of default branch)
+     */
+    public String getQueryResults(String projectId, String queryId) throws IOException {
+        return getQueryResults(projectId, queryId, null, null, null, null);
     }
 
     // ============ Tag Operations ============

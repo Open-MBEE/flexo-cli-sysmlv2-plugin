@@ -269,56 +269,39 @@ Expected output:
 ```
 Cloning project from remote...
   Remote project ID: proj-prod-abc123
-  Remote URL: https://sysml.example.com (production)
-  Local URL: http://localhost:9000
+  Remote: production
 
-Step 1: Fetching remote project metadata...
-  Remote project: Production Model
-  Description: Production SysML model
+Step 1: Creating new local project...
+  Created local project: c7906e60-ff9f-47da-b876-1968f35671c4
+  Project name: Dev Copy of Production Model
 
-Step 2: Creating local project...
-  Created local project: proj-local-xyz789
+Step 2: Creating project mapping...
+  Created project mapping: c7906e60-ff9f-47da-b876-1968f35671c4 <-> production/proj-prod-abc123
 
-Step 3: Fetching branches...
-  Found 1 branch(es)
-
-Step 4.1: Cloning branch 'master'...
-  Remote branch ID: branch-remote-abc
-  Head commit: commit-remote-123
-  Fetching elements...
-  Found 42 element(s)
-  Creating elements in local project...
-  Using local commit: commit-local-456
-  Created 42 element(s) in local project
-
-Step 5: Creating project and branch mappings...
-  Created project mapping: proj-local-xyz789 <-> production/proj-prod-abc123
-  Created 1 branch mapping(s)
-  Mappings saved to configuration
+Step 3: Pulling project data...
+[Output from flexo pull command - actual data transfer]
 
 Clone complete!
 
-Local project ID: proj-local-xyz789
+Local project ID: c7906e60-ff9f-47da-b876-1968f35671c4
+Remote project ID: proj-prod-abc123
+Remote: production
+
 You can now work with this project using:
-  flexo sysml project get --project proj-local-xyz789
-  flexo sysml element list --project proj-local-xyz789
+  flexo sysml pull c7906e60-ff9f-47da-b876-1968f35671c4
+  flexo sysml push c7906e60-ff9f-47da-b876-1968f35671c4 -m "commit message"
 ```
 
-### 4.2 Dry Run Clone
-
-```bash
-# Preview what would be cloned without actually cloning
-flexo --remote production clone proj-prod-abc123 --dry-run
-```
-
-### 4.3 Clone Specific Branch
+### 4.2 Clone Specific Branch
 
 ```bash
 # Clone only a specific branch
 flexo --remote production clone proj-prod-abc123 \
-    --branch feature-branch \
+    --branch feature-branch-id \
     --name "Feature Branch Copy"
 ```
+
+**Note**: The `--branch` parameter expects a branch ID (UUID), not a branch name.
 
 ---
 
@@ -533,13 +516,13 @@ flexo sysml element list \
 flexo sysml element get \
     --project proj-12345-abc-67890 \
     --commit commit-abc-123 \
-    --element elem-xyz-789
+    elem-xyz-789
 
 # Verbose output
 flexo sysml -v element get \
     --project proj-12345-abc-67890 \
     --commit commit-abc-123 \
-    --element elem-xyz-789
+    elem-xyz-789
 ```
 
 ### 7.3 Get Root Elements
@@ -575,20 +558,40 @@ Branches:
   Initial (ID: 88299563-581f-45e0-978a-99b5a70b5d2b)
 ```
 
-**Note**: The SysML v2 API creates an "Initial" branch automatically when a project is created. Branch creation via API is not currently supported in the SysML v2 standard - branches are managed through commits and project operations.
-
-### 8.2 View Branch Details with Commits
-
-To see more details about a branch, list its commits:
+### 8.2 Get Branch Details
 
 ```bash
-# List commits on a specific branch
-flexo sysml commit list \
+# Get details for a specific branch
+flexo sysml branch get \
     --project 3a912c13-a609-4954-909d-b773be7edb0f \
-    --branch Initial
+    --branch 88299563-581f-45e0-978a-99b5a70b5d2b
 ```
 
-### 8.3 Branch Usage in Pull/Push Operations
+Expected output:
+```
+Branch Details:
+  ID: 88299563-581f-45e0-978a-99b5a70b5d2b
+  Name: Initial
+  Description: Default branch
+```
+
+### 8.3 Create a New Branch
+
+```bash
+# Create a feature branch
+flexo sysml branch create \
+    --project 3a912c13-a609-4954-909d-b773be7edb0f \
+    --name "feature-xyz" \
+    --description "Development branch for feature XYZ"
+```
+
+Expected output:
+```
+Created branch: 12345678-abcd-efgh-ijkl-9876543210ab
+  Name: feature-xyz
+```
+
+### 8.4 Branch Usage in Pull/Push Operations
 
 Branches are primarily used when pulling and pushing model data:
 
@@ -605,7 +608,21 @@ flexo sysml push proj-local-xyz789 \
     --input updated-model.ttl
 ```
 
-### 8.4 Branch Mapping for Multi-Environment Workflows
+### 8.5 Delete a Branch
+
+```bash
+# Delete a feature branch when no longer needed
+flexo sysml branch delete \
+    --project 3a912c13-a609-4954-909d-b773be7edb0f \
+    --branch 12345678-abcd-efgh-ijkl-9876543210ab
+```
+
+Expected output:
+```
+Branch deleted: 12345678-abcd-efgh-ijkl-9876543210ab
+```
+
+### 8.6 Branch Mapping for Multi-Environment Workflows
 
 When cloning projects, branch mappings are automatically created to track which local branch corresponds to which remote branch:
 
@@ -637,12 +654,9 @@ local-branch-abc          remote-branch-xyz
 ```bash
 # List commits in project
 flexo sysml commit list --project proj-12345-abc-67890
-
-# List commits on specific branch
-flexo sysml commit list \
-    --project proj-12345-abc-67890 \
-    --branch master
 ```
+
+**Note**: The `--branch` flag exists for backward compatibility but is ignored. The SysML v2 API does not support filtering commits by branch name.
 
 ---
 
@@ -657,6 +671,62 @@ flexo sysml query list --project proj-12345-abc-67890
 # On specific remote
 flexo --remote production query list \
     --project proj-prod-abc123
+```
+
+### 10.2 Get Query Details
+
+```bash
+# Get details for a specific query
+flexo sysml query get \
+    --project proj-12345-abc-67890 \
+    --query query-uuid-123
+```
+
+Expected output:
+```
+Query Details:
+  ID: query-uuid-123
+  Type: Query
+```
+
+### 10.3 Execute a Query
+
+```bash
+# Execute query at HEAD of default branch
+flexo sysml query execute \
+    --project proj-12345-abc-67890 \
+    --query query-uuid-123
+
+# Execute query at specific commit (point-in-time query)
+flexo sysml query execute \
+    --project proj-12345-abc-67890 \
+    --query query-uuid-123 \
+    --commit commit-abc-123
+```
+
+Expected output:
+```
+Query Results (15 elements):
+  elem-123 (PartDefinition) - Spacecraft
+  elem-456 (AttributeUsage) - mass
+  elem-789 (ConnectionDefinition) - PowerConnection
+  ...
+```
+
+**Use Case - Historical Analysis**:
+```bash
+# Execute query at current state
+flexo sysml query execute \
+    --project proj-12345-abc-67890 \
+    --query safety-critical-elements
+
+# Execute same query at previous release to compare
+flexo sysml query execute \
+    --project proj-12345-abc-67890 \
+    --query safety-critical-elements \
+    --commit v1.0-release-commit
+
+# This allows you to see what changed between versions
 ```
 
 ---
@@ -681,11 +751,33 @@ flexo --remote production tag list \
 ### 12.1 Query Element Relationships
 
 ```bash
-# Get relationships for an element
-flexo sysml relationship get \
+# List relationships for an element
+flexo sysml relationship list \
     --project proj-12345-abc-67890 \
     --commit commit-abc-123 \
-    --element elem-xyz-789
+    elem-xyz-789
+
+# Filter by relationship direction
+flexo sysml relationship list \
+    --project proj-12345-abc-67890 \
+    --commit commit-abc-123 \
+    --direction in \
+    elem-xyz-789
+
+# Exclude elements from ProjectUsages
+flexo sysml relationship list \
+    --project proj-12345-abc-67890 \
+    --commit commit-abc-123 \
+    --exclude-used \
+    elem-xyz-789
+```
+
+Expected output:
+```
+Relationships:
+  Ownership -> owner-elem-123
+  ConnectionUsage -> connection-elem-456
+  FeatureMembership -> feature-elem-789
 ```
 
 ---
@@ -877,16 +969,13 @@ Failed to get project: HTTP 404: Project not found
 
 ## Phase 18: Advanced Features
 
-### 18.1 Clone with Custom Options
+### 18.1 Clone with Custom Name
 
 ```bash
-# Clone to specific local URL
+# Clone with custom project name
 flexo --remote production clone proj-prod-abc \
-    --to-local http://localhost:8080 \
-    --name "Custom Local Copy"
-
-# Dry run to preview
-flexo --remote production clone proj-prod-abc --dry-run
+    --name "Custom Local Copy" \
+    --description "Development copy"
 ```
 
 ### 18.2 Multi-Branch Development
@@ -950,11 +1039,11 @@ nano ~/.flexo/config
 | `flexo sysml remote` | Manage SysML v2 remotes |
 | `flexo sysml map` | Manage project/branch mappings |
 | `flexo sysml map lookup` | Find local ID from remote ID |
-| `flexo sysml project` | Manage projects (CRUD) |
-| `flexo sysml element` | Query elements |
-| `flexo sysml branch` | List branches |
+| `flexo sysml project` | Manage projects (create, list, get, update, delete) |
+| `flexo sysml element` | Query elements (list, get, roots) |
+| `flexo sysml branch` | Manage branches (list, get, create, delete) |
 | `flexo sysml commit` | List commits |
-| `flexo sysml query` | List queries |
+| `flexo sysml query` | Manage and execute queries (list, get, execute) |
 | `flexo sysml tag` | List tags |
 | `flexo sysml relationship` | Query relationships |
 

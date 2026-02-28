@@ -547,11 +547,20 @@ flexo sysml element roots --project PROJECT_ID --commit COMMIT_ID
 
 ### Branch Commands
 
-The SysML v2 API automatically creates an "Initial" branch when a project is created. Branch operations are primarily read-only through the API.
+Branch operations allow you to manage parallel development workflows and version isolation.
 
 ```bash
 # List branches in a project
 flexo sysml branch list --project PROJECT_ID
+
+# Get details for a specific branch
+flexo sysml branch get --project PROJECT_ID --branch BRANCH_ID
+
+# Create a new branch
+flexo sysml branch create --project PROJECT_ID --name "feature-branch" --description "Feature development"
+
+# Delete a branch
+flexo sysml branch delete --project PROJECT_ID --branch BRANCH_ID
 
 # List branches on a specific remote
 flexo --remote production branch list --project PROJECT_ID
@@ -562,29 +571,31 @@ flexo sysml -v branch list --project PROJECT_ID
 # Example output:
 # Branches:
 #   Initial (ID: 88299563-581f-45e0-978a-99b5a70b5d2b)
+#   feature-branch (ID: 12345678-abcd-efgh-ijkl-9876543210ab)
 ```
-
-**Note**: Branch creation via the SysML v2 API is not currently supported in the standard. Branches are managed through the underlying Flexo MMS backend and commit operations. When you create a project, an "Initial" branch is automatically created.
 
 **Working with Branch IDs**: Branch IDs are UUIDs and are needed for:
 - Pull/push operations with `--branch` flag
 - Creating branch mappings for synchronized workflows
 - Querying commits on specific branches
 
-**Example**: Get branch ID for mapping:
+**Example**: Create and use a branch:
 ```bash
-# List branches to get their IDs
-flexo sysml branch list --project proj-local-abc123
-# Output: Initial (ID: 88299563-581f-45e0-978a-99b5a70b5d2b)
+# Create a new branch
+flexo sysml branch create --project proj-local-abc123 --name "dev-branch"
+# Output: Created branch: 12345678-abcd-efgh-ijkl-9876543210ab
+
+# Get branch details
+flexo sysml branch get --project proj-local-abc123 --branch 12345678-abcd-efgh-ijkl-9876543210ab
 
 # Use this ID in branch mappings
 flexo sysml map add-branch proj-local-abc123 \
-    88299563-581f-45e0-978a-99b5a70b5d2b \
+    12345678-abcd-efgh-ijkl-9876543210ab \
     remote-branch-guid-xyz
 
 # Use in pull/push operations
 flexo sysml pull proj-local-abc123 \
-    --branch 88299563-581f-45e0-978a-99b5a70b5d2b \
+    --branch 12345678-abcd-efgh-ijkl-9876543210ab \
     --output model.ttl
 ```
 
@@ -592,15 +603,42 @@ flexo sysml pull proj-local-abc123 \
 
 ```bash
 # List commits in a project
-flexo sysml commit list --project PROJECT_ID --branch BRANCH_NAME
+flexo sysml commit list --project PROJECT_ID
 ```
 
+**Note**: The `--branch` flag exists for backward compatibility but is ignored. The SysML v2 API does not support filtering commits by branch. To view commits for a specific branch, you need to get the branch's head commit and traverse its history.
+
 ### Query Commands
+
+Query operations allow you to search and filter model elements based on criteria.
 
 ```bash
 # List queries in a project
 flexo sysml query list --project PROJECT_ID
+
+# Get details for a specific query
+flexo sysml query get --project PROJECT_ID --query QUERY_ID
+
+# Execute a query at HEAD of default branch
+flexo sysml query execute --project PROJECT_ID --query QUERY_ID
+
+# Execute a query at a specific commit (point-in-time query)
+flexo sysml query execute --project PROJECT_ID --query QUERY_ID --commit COMMIT_ID
+
+# Example: Historical analysis
+# Execute query at current state
+flexo sysml query execute --project proj-123 --query safety-requirements
+
+# Execute same query at previous release
+flexo sysml query execute --project proj-123 --query safety-requirements --commit v1.0-commit-id
 ```
+
+**Using --commit for Point-in-Time Queries**:
+The `--commit` flag allows you to execute queries against historical data:
+- Compare query results across versions
+- Debug changes by querying at specific commits
+- Generate consistent reports from a known state
+- Analyze evolution of model elements over time
 
 ### Tag Commands
 
@@ -614,6 +652,12 @@ flexo sysml tag list --project PROJECT_ID
 ```bash
 # List relationships for an element
 flexo sysml relationship list --project PROJECT_ID --commit COMMIT_ID ELEMENT_ID
+
+# Filter by relationship direction (in, out, or both)
+flexo sysml relationship list --project PROJECT_ID --commit COMMIT_ID --direction in ELEMENT_ID
+
+# Exclude elements from ProjectUsages
+flexo sysml relationship list --project PROJECT_ID --commit COMMIT_ID --exclude-used ELEMENT_ID
 ```
 
 ## Global Options
