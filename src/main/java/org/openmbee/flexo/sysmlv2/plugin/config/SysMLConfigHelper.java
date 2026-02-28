@@ -58,6 +58,7 @@ public class SysMLConfigHelper {
             remote.setName(name);
             remote.setUrl(properties.getProperty(REMOTE_PREFIX + name + ".url"));
             remote.setFlexoRemote(properties.getProperty(REMOTE_PREFIX + name + ".flexoRemote"));
+            remote.setOrg(properties.getProperty(REMOTE_PREFIX + name + ".org"));
             remotes.put(name, remote);
         }
         
@@ -77,6 +78,7 @@ public class SysMLConfigHelper {
         remote.setName(name);
         remote.setUrl(url);
         remote.setFlexoRemote(properties.getProperty(REMOTE_PREFIX + name + ".flexoRemote"));
+        remote.setOrg(properties.getProperty(REMOTE_PREFIX + name + ".org"));
         return remote;
     }
     
@@ -85,8 +87,11 @@ public class SysMLConfigHelper {
      */
     public void setRemote(SysMLRemote remote) {
         properties.setProperty(REMOTE_PREFIX + remote.getName() + ".url", remote.getUrl());
-        if (remote.getFlexoRemote() != null) {
+        if (remote.getFlexoRemote() != null && !remote.getFlexoRemote().isEmpty()) {
             properties.setProperty(REMOTE_PREFIX + remote.getName() + ".flexoRemote", remote.getFlexoRemote());
+        }
+        if (remote.getOrg() != null && !remote.getOrg().isEmpty()) {
+            properties.setProperty(REMOTE_PREFIX + remote.getName() + ".org", remote.getOrg());
         }
     }
     
@@ -247,6 +252,21 @@ public class SysMLConfigHelper {
     }
     
     /**
+     * Get a specific project mapping by remote project ID and remote name
+     * This allows looking up the local project ID given a remote project ID
+     */
+    public ProjectMapping getProjectMappingByRemote(String remoteName, String remoteProjectId) {
+        Map<String, ProjectMapping> allMappings = getProjectMappings();
+        for (ProjectMapping mapping : allMappings.values()) {
+            if (remoteName.equals(mapping.getRemoteName()) && 
+                remoteProjectId.equals(mapping.getRemoteProjectId())) {
+                return mapping;
+            }
+        }
+        return null;
+    }
+    
+    /**
      * Add or update a project mapping
      */
     public void setProjectMapping(ProjectMapping mapping) {
@@ -365,6 +385,20 @@ public class SysMLConfigHelper {
         }
         
         return new BranchMapping(localProjectId, localBranchId, remoteBranchId);
+    }
+    
+    /**
+     * Get a specific branch mapping by remote branch ID
+     * This allows looking up the local branch ID given a remote branch ID
+     */
+    public BranchMapping getBranchMappingByRemote(String localProjectId, String remoteBranchId) {
+        Map<String, BranchMapping> allBranchMappings = getBranchMappings(localProjectId);
+        for (BranchMapping mapping : allBranchMappings.values()) {
+            if (remoteBranchId.equals(mapping.getRemoteBranchId())) {
+                return mapping;
+            }
+        }
+        return null;
     }
     
     /**

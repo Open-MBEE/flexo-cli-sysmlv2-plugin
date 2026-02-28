@@ -158,7 +158,15 @@ public class ProjectCommand extends SysMLBaseCommand {
                 JsonNode project = mapper.readTree(response);
 
                 String id = project.has("@id") ? project.get("@id").asText() : "unknown";
+                String defaultBranchId = null;
+                if (project.has("defaultBranch") && project.get("defaultBranch").has("@id")) {
+                    defaultBranchId = project.get("defaultBranch").get("@id").asText();
+                }
+                
                 success("Created project: " + id);
+                if (defaultBranchId != null) {
+                    info("Default branch ID: " + defaultBranchId);
+                }
 
                 if (isVerbose()) {
                     info("");

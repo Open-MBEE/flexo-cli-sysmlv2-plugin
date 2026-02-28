@@ -1,8 +1,12 @@
 package org.openmbee.flexo.sysmlv2.plugin.commands;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.openmbee.flexo.sysmlv2.plugin.client.SysMLv2Client;
 import org.openmbee.flexo.sysmlv2.plugin.config.SysMLConfigHelper;
 import org.openmbee.flexo.sysmlv2.plugin.model.BranchMapping;
 import org.openmbee.flexo.sysmlv2.plugin.model.ProjectMapping;
+import org.openmbee.flexo.sysmlv2.plugin.model.SysMLRemote;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -13,23 +17,23 @@ import java.util.List;
 /**
  * Push command for SysML v2 - Commit model changes to a remote SysML project/branch
  * 
- * This command translates local project/branch IDs to remote IDs using mappings,
+ * This command translates remote project/branch IDs to local flexo IDs using mappings,
  * then delegates to the underlying Flexo CLI push command.
  * 
- * Usage: flexo sysml push <local-project-id> [options]
+ * Usage: flexo sysml push <remote-project-id> [options]
  */
 @Command(
     name = "push",
-    description = "Push model changes to remote SysML v2 project",
+    description = "Push model to remote SysML v2 project",
     mixinStandardHelpOptions = true
 )
 public class PushCommand extends SysMLBaseCommand {
 
-    @Parameters(index = "0", description = "Local project ID")
-    private String localProjectId;
+    @Parameters(index = "0", description = "Remote project ID")
+    private String remoteProjectId;
 
-    @Option(names = {"-b", "--branch"}, description = "Local branch ID (optional)")
-    private String localBranchId;
+    @Option(names = {"-b", "--branch"}, description = "Remote branch ID (optional)")
+    private String remoteBranchId;
 
     @Option(names = {"-m", "--message"}, description = "Commit message", required = true)
     private String commitMessage;
@@ -44,48 +48,40 @@ public class PushCommand extends SysMLBaseCommand {
     public void run() {
         try {
             info("Pushing to remote...");
-            debug("Local project ID: " + localProjectId);
-            if (localBranchId != null) {
-                debug("Local branch ID: " + localBranchId);
+            debug("Remote project ID: " + remoteProjectId);
+            if (remoteBranchId != null) {
+                debug("Remote branch ID: " + remoteBranchId);
             }
 
-            // Step 1: Load configuration and mappings
+            // Step 1: Get remote name from context
+            String remoteName = getRemoteName();
+            if (remoteName == null) {
+                try {
+                    SysMLConfigHelper config = new SysMLConfigHelper();
+                    remoteName = config.getDefaultRemote();
+                } catch (Exception e) {
+                    remoteName = "origin";
+                }
+            }
+
+            // Step 2: Load configuration and mappings
             SysMLConfigHelper sysmlConfig = new SysMLConfigHelper();
             
-            // Step 2: Look up project mapping
-            ProjectMapping projectMapping = sysmlConfig.getProjectMapping(localProjectId);
-            if (projectMapping == null) {
-                error("No mapping found for local project: " + localProjectId);
-                info("");
-                info("Available options:");
-                info("  1. Clone a remote project: flexo sysml --remote <name> clone <remote-project-id>");
-                info("  2. Create mapping: flexo sysml map add " + localProjectId + " <remote-name> <remote-project-id>");
-                info("  3. List mappings: flexo sysml map list");
-                System.exit(1);
-                return;
-            }
-
-            String remoteName = projectMapping.getRemoteName();
-            String remoteProjectId = projectMapping.getRemoteProjectId();
+            // Step 3: Look up project mapping (remote -> local)
+            ProjectMapping projectMapping = sysmlConfig.getProjectMappingByRemote(remoteName, remoteProjectId);
+            String localProjectId;
             
-            info("  Project mapping:");
-            info("    Local:  " + localProjectId);
-            info("    Remote: " + remoteName + "/" + remoteProjectId);
-
-            // Step 3: Look up branch mapping (if branch specified)
-            String remoteBranchId = null;
-            if (localBranchId != null && !localBranchId.isEmpty()) {
-                BranchMapping branchMapping = sysmlConfig.getBranchMapping(localProjectId, localBranchId);
-                if (branchMapping == null) {
-                    warn("No branch mapping found for: " + localBranchId);
-                    warn("Using branch ID as-is (assuming it exists on remote)");
-                    remoteBranchId = localBranchId;
-                } else {
-                    remoteBranchId = branchMapping.getRemoteBranchId();
-                    info("  Branch mapping:");
-                    info("    Local:  " + localBranchId);
-                    info("    Remote: " + remoteBranchId);
-                }
+            if (projectMapping == null) {
+                // No mapping found - assume this is a local-only project
+                info("  No project mapping found - treating as local-only project");
+                localProjectId = remoteProjectId; // Use the provided ID as local ID
+                remoteProjectId = localProjectId; // Keep them the same
+            } else {
+                localProjectId = projectMapping.getLocalProjectId();
+                
+                info("  Project mapping:");
+                info("    Remote: " + remoteName + "/" + remoteProjectId);
+                info("    Local:  " + localProjectId);
             }
 
             // Step 4: Get remote URL
@@ -98,17 +94,72 @@ public class PushCommand extends SysMLBaseCommand {
             }
 
             info("  Remote URL: " + remoteUrl);
+
+            // Step 5: Look up branch mapping (remote -> local)
+            String localBranchId = null;
+            if (remoteBranchId != null && !remoteBranchId.isEmpty()) {
+                // User specified a remote branch - look up its mapping
+                BranchMapping branchMapping = sysmlConfig.getBranchMappingByRemote(localProjectId, remoteBranchId);
+                if (branchMapping == null) {
+                    // No mapping found - assume this is a local-only branch
+                    info("  No branch mapping found - treating as local-only branch");
+                    localBranchId = remoteBranchId; // Use the provided ID as local ID
+                } else {
+                    localBranchId = branchMapping.getLocalBranchId();
+                    info("  Branch mapping:");
+                    info("    Remote: " + remoteBranchId);
+                    info("    Local:  " + localBranchId);
+                }
+            } else {
+                // No branch specified - use remote project's default branch
+                info("  No branch specified, fetching remote default branch...");
+                try {
+                    SysMLv2Client client = new SysMLv2Client(remoteUrl, getClient());
+                    String remoteProjectResponse = client.getProject(remoteProjectId);
+                    ObjectMapper mapper = new ObjectMapper();
+                    JsonNode remoteProject = mapper.readTree(remoteProjectResponse);
+                    
+                    if (remoteProject.has("defaultBranch") && remoteProject.get("defaultBranch").has("@id")) {
+                        String remoteDefaultBranchId = remoteProject.get("defaultBranch").get("@id").asText();
+                        info("  Remote default branch: " + remoteDefaultBranchId);
+                        
+                        // Try to find mapping for remote default branch
+                        BranchMapping branchMapping = sysmlConfig.getBranchMappingByRemote(localProjectId, remoteDefaultBranchId);
+                        if (branchMapping != null) {
+                            localBranchId = branchMapping.getLocalBranchId();
+                            remoteBranchId = remoteDefaultBranchId;
+                            info("  Mapped to local branch: " + localBranchId);
+                        } else {
+                            // No mapping found - assume local-only branch
+                            info("  No branch mapping found - treating as local-only branch");
+                            localBranchId = remoteDefaultBranchId;
+                            remoteBranchId = remoteDefaultBranchId;
+                        }
+                    }
+                } catch (Exception e) {
+                    warn("Failed to fetch remote project's default branch: " + e.getMessage());
+                    if (isVerbose()) {
+                        e.printStackTrace();
+                    }
+                    // Continue without branch specification
+                }
+            }
             info("");
 
-            // Step 5: Build flexo push command
+            // Step 6: Build flexo push command
             info("Executing: flexo push...");
+            
+            // Get Flexo organization name from remote config (defaults to "sysmlv2")
+            SysMLRemote remote = sysmlConfig.getRemote(remoteName);
+            String flexoOrg = (remote != null) ? remote.getOrgOrDefault() : "sysmlv2";
+            
             List<String> command = new ArrayList<>();
             command.add("flexo");
             command.add("push");
             command.add("--org");
-            command.add(remoteProjectId);
+            command.add(flexoOrg);  // Get org from remote config (configurable per remote)
             command.add("--repo");
-            command.add("default");  // SysML v2 uses a default repo concept
+            command.add(remoteProjectId);  // Each project is a repo in the org
             command.add("--remote");
             command.add(remoteName);
             command.add("--message");

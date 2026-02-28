@@ -10,6 +10,7 @@ public class SysMLRemote {
     private String name;
     private String url;
     private String flexoRemote;  // Name of the Flexo backend remote to use for authentication
+    private String org;  // Flexo MMS organization name (defaults to "sysmlv2")
 
     public SysMLRemote() {
     }
@@ -23,6 +24,13 @@ public class SysMLRemote {
         this.name = name;
         this.url = url;
         this.flexoRemote = flexoRemote;
+    }
+    
+    public SysMLRemote(String name, String url, String flexoRemote, String org) {
+        this.name = name;
+        this.url = url;
+        this.flexoRemote = flexoRemote;
+        this.org = org;
     }
 
     public String getName() {
@@ -47,6 +55,21 @@ public class SysMLRemote {
 
     public void setFlexoRemote(String flexoRemote) {
         this.flexoRemote = flexoRemote;
+    }
+    
+    public String getOrg() {
+        return org;
+    }
+    
+    public void setOrg(String org) {
+        this.org = org;
+    }
+    
+    /**
+     * Get the organization name with fallback to default
+     */
+    public String getOrgOrDefault() {
+        return org != null && !org.isEmpty() ? org : "sysmlv2";
     }
 
     @Override

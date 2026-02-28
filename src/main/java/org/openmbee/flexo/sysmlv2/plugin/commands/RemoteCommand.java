@@ -22,6 +22,7 @@ import java.util.Map;
                 RemoteCommand.RemoveCommand.class,
                 RemoteCommand.ListCommand.class,
                 RemoteCommand.SetUrlCommand.class,
+                RemoteCommand.SetOrgCommand.class,
                 RemoteCommand.SetFlexoRemoteCommand.class,
                 RemoteCommand.ShowCommand.class,
                 RemoteCommand.RenameCommand.class
@@ -102,6 +103,9 @@ public class RemoteCommand extends PluginCommand {
         @Option(names = {"--flexo-remote"}, description = "Name of Flexo backend remote to use for authentication")
         private String flexoRemote;
 
+        @Option(names = {"--org"}, description = "Organization name (defaults to 'sysmlv2')")
+        private String org;
+
         @Override
         public void run() {
             try {
@@ -121,6 +125,12 @@ public class RemoteCommand extends PluginCommand {
 
                 // Create and configure remote
                 SysMLRemote remote = new SysMLRemote(name, url, flexoRemote);
+                
+                // Set organization if specified
+                if (org != null && !org.isEmpty()) {
+                    remote.setOrg(org);
+                }
+                
                 config.setRemote(remote);
 
                 // Set as default if requested
@@ -130,6 +140,11 @@ public class RemoteCommand extends PluginCommand {
 
                 config.save();
                 success("Remote '" + name + "' added: " + url);
+                if (org != null && !org.isEmpty()) {
+                    info("Organization: " + org);
+                } else {
+                    info("Organization: sysmlv2 (default)");
+                }
                 if (flexoRemote != null) {
                     info("Linked to Flexo backend remote: " + flexoRemote);
                 }
@@ -225,6 +240,56 @@ public class RemoteCommand extends PluginCommand {
     }
 
     /**
+     * Set organization for a SysML v2 remote
+     */
+    @Command(
+            name = "set-org",
+            description = "Set or update the organization for a SysML v2 remote",
+            mixinStandardHelpOptions = true
+    )
+    static class SetOrgCommand extends PluginCommand {
+        @Parameters(index = "0", description = "SysML v2 remote name")
+        private String name;
+
+        @Parameters(index = "1", description = "Organization name (use 'none' to reset to default 'sysmlv2')")
+        private String org;
+
+        @Override
+        public void run() {
+            try {
+                SysMLConfigHelper config = new SysMLConfigHelper();
+
+                if (!config.hasRemote(name)) {
+                    error("Remote '" + name + "' does not exist");
+                    info("Use 'flexo sysml remote add " + name + " <url>' to add it");
+                    throw new RuntimeException("Remote '" + name + "' does not exist");
+                }
+
+                SysMLRemote remote = config.getRemote(name);
+                
+                // Handle unsetting (reset to default)
+                if ("none".equalsIgnoreCase(org)) {
+                    remote.setOrg(null);
+                    config.setRemote(remote);
+                    config.save();
+                    success("Organization reset for '" + name + "' (will use default: sysmlv2)");
+                } else {
+                    remote.setOrg(org);
+                    config.setRemote(remote);
+                    config.save();
+                    success("Remote '" + name + "' organization set to: " + org);
+                }
+            } catch (Exception e) {
+                error("Failed to update organization: " + e.getMessage());
+                if (isVerbose()) {
+                    e.printStackTrace();
+                }
+                throw new RuntimeException("Failed to update organization", e);
+            }
+        }
+    }
+
+    /**
      * Set Flexo backend remote for a SysML v2 remote
      */
     @Command(
@@ -307,6 +372,7 @@ public class RemoteCommand extends PluginCommand {
 
                 info("Remote: " + remote.getName() + (isDefault ? " (default)" : ""));
                 info("  URL: " + remote.getUrl());
+                info("  Organization: " + remote.getOrgOrDefault());
                 if (remote.getFlexoRemote() != null) {
                     info("  Flexo Backend: " + remote.getFlexoRemote());
                 }

@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.openmbee.flexo.sysmlv2.plugin.client.SysMLv2Client;
 import org.openmbee.flexo.sysmlv2.plugin.config.SysMLConfigHelper;
+import org.openmbee.flexo.sysmlv2.plugin.model.BranchMapping;
 import org.openmbee.flexo.sysmlv2.plugin.model.ProjectMapping;
+import org.openmbee.flexo.sysmlv2.plugin.model.SysMLRemote;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -82,7 +84,7 @@ public class CloneCommand extends SysMLBaseCommand {
             
             String response = client.createProject(localProjectName, projectDescription);
             
-            // Parse response to get the new project ID
+            // Parse response to get the new project ID and default branch ID
             ObjectMapper mapper = new ObjectMapper();
             JsonNode project = mapper.readTree(response);
             String localProjectId = project.has("@id") ? project.get("@id").asText() : null;
@@ -93,12 +95,39 @@ public class CloneCommand extends SysMLBaseCommand {
                 return;
             }
             
+            // Extract local default branch ID from the response
+            String localDefaultBranchId = null;
+            if (project.has("defaultBranch") && project.get("defaultBranch").has("@id")) {
+                localDefaultBranchId = project.get("defaultBranch").get("@id").asText();
+            }
+            
             success("  Created local project: " + localProjectId);
             info("  Project name: " + localProjectName);
+            if (localDefaultBranchId != null) {
+                info("  Local default branch ID: " + localDefaultBranchId);
+            }
+
+            // Fetch remote project's default branch ID
+            info("");
+            info("Step 2: Fetching remote project details...");
+            String remoteDefaultBranchId = null;
+            try {
+                String remoteProjectResponse = client.getProject(remoteProjectId);
+                JsonNode remoteProject = mapper.readTree(remoteProjectResponse);
+                if (remoteProject.has("defaultBranch") && remoteProject.get("defaultBranch").has("@id")) {
+                    remoteDefaultBranchId = remoteProject.get("defaultBranch").get("@id").asText();
+                    info("  Remote default branch ID: " + remoteDefaultBranchId);
+                }
+            } catch (Exception e) {
+                warn("Failed to fetch remote project details: " + e.getMessage());
+                if (isVerbose()) {
+                    e.printStackTrace();
+                }
+            }
 
             // Step 3: Create project mapping
             info("");
-            info("Step 2: Creating project mapping...");
+            info("Step 3: Creating project mapping...");
             SysMLConfigHelper config = new SysMLConfigHelper();
             
             ProjectMapping projectMapping = new ProjectMapping();
@@ -110,22 +139,51 @@ public class CloneCommand extends SysMLBaseCommand {
             
             success("  Created project mapping: " + localProjectId + " <-> " + remoteName + "/" + remoteProjectId);
 
-            // Step 4: Build flexo pull command to fetch the data
+            // Step 4: Create branch mapping for default branches (if both exist)
+            if (localDefaultBranchId != null && remoteDefaultBranchId != null) {
+                info("");
+                info("Step 4: Creating default branch mapping...");
+                BranchMapping branchMapping = new BranchMapping(localProjectId, localDefaultBranchId, remoteDefaultBranchId);
+                config.setBranchMapping(branchMapping);
+                config.save();
+                success("  Created branch mapping: " + localDefaultBranchId + " <-> " + remoteDefaultBranchId);
+            } else {
+                info("");
+                info("Step 4: Skipping branch mapping (default branch not available on both local and remote)");
+                if (localDefaultBranchId == null) {
+                    debug("  Local project has no default branch");
+                }
+                if (remoteDefaultBranchId == null) {
+                    debug("  Remote project has no default branch");
+                }
+            }
+
+            // Step 5: Build flexo pull command to fetch the data
             info("");
-            info("Step 3: Pulling project data...");
+            info("Step 5: Pulling project data...");
+            
+            // Get Flexo organization name from remote config (defaults to "sysmlv2")
+            SysMLRemote remote = config.getRemote(remoteName);
+            String flexoOrg = (remote != null) ? remote.getOrgOrDefault() : "sysmlv2";
+            
             List<String> command = new ArrayList<>();
             command.add("flexo");
             command.add("pull");
             command.add("--org");
-            command.add(remoteProjectId);
+            command.add(flexoOrg);  // Get org from remote config (configurable per remote)
             command.add("--repo");
-            command.add("default");  // SysML v2 uses a default repo concept
+            command.add(remoteProjectId);  // Each project is a repo in the org
             command.add("--remote");
             command.add(remoteName);
             
+            // Use specified branch or remote default branch ID
             if (specificBranch != null && !specificBranch.isEmpty()) {
                 command.add("--branch");
                 command.add(specificBranch);
+            } else if (remoteDefaultBranchId != null) {
+                command.add("--branch");
+                command.add(remoteDefaultBranchId);
+                debug("Using remote default branch ID: " + remoteDefaultBranchId);
             }
             
             if (outputFile != null && !outputFile.isEmpty()) {
@@ -158,8 +216,8 @@ public class CloneCommand extends SysMLBaseCommand {
                 info("Remote: " + remoteName);
                 info("");
                 info("You can now work with this project using:");
-                info("  flexo sysml pull " + localProjectId);
-                info("  flexo sysml push " + localProjectId + " -m \"commit message\"");
+                info("  flexo sysml pull " + remoteProjectId);
+                info("  flexo sysml push " + remoteProjectId + " -m \"commit message\"");
             } else {
                 error("Clone failed with exit code: " + exitCode);
                 System.exit(exitCode);
