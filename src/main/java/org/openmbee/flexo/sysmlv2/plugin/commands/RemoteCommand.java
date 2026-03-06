@@ -103,7 +103,7 @@ public class RemoteCommand extends PluginCommand {
         @Option(names = {"--flexo-remote"}, description = "Name of Flexo backend remote to use for authentication")
         private String flexoRemote;
 
-        @Option(names = {"--org"}, description = "Organization name (defaults to 'sysmlv2')")
+        @Option(names = {"--orgsysml"}, description = "SysML organization name (defaults to 'sysmlv2')")
         private String org;
 
         @Override

@@ -11,6 +11,8 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -68,21 +70,24 @@ public class CloneCommand extends SysMLBaseCommand {
             }
             info("  Remote: " + remoteName);
 
-            // Step 2: Create a new local project
+            SysMLConfigHelper config = new SysMLConfigHelper();
+            String localSysmlRemoteName = config.getDefaultRemote();
+            String localSysmlUrl = getSysMLUrl(localSysmlRemoteName);
+            String remoteSysmlUrl = getSysMLUrl(remoteName);
+
+            // Step 2: Create a new local project (always on local/origin SysML)
             info("");
             info("Step 1: Creating new local project...");
+            debug("Using local SysML v2 API at: " + localSysmlUrl + " (remote=" + localSysmlRemoteName + ")");
             
-            String url = getSysMLUrl();
-            debug("Using SysML v2 API at: " + url);
-            
-            SysMLv2Client client = new SysMLv2Client(url, getClient());
+            SysMLv2Client localClient = new SysMLv2Client(localSysmlUrl, getClientForSysmlRemote(localSysmlRemoteName));
             
             // Use provided name or default to remote project ID
             String localProjectName = (projectName != null && !projectName.isEmpty()) 
                 ? projectName 
                 : "clone-of-" + remoteProjectId;
             
-            String response = client.createProject(localProjectName, projectDescription);
+            String response = localClient.createProject(localProjectName, projectDescription);
             
             // Parse response to get the new project ID and default branch ID
             ObjectMapper mapper = new ObjectMapper();
@@ -107,12 +112,14 @@ public class CloneCommand extends SysMLBaseCommand {
                 info("  Local default branch ID: " + localDefaultBranchId);
             }
 
-            // Fetch remote project's default branch ID
+            // Fetch remote project's default branch ID (from the remote SysML instance)
             info("");
             info("Step 2: Fetching remote project details...");
+            debug("Using remote SysML v2 API at: " + remoteSysmlUrl + " (remote=" + remoteName + ")");
             String remoteDefaultBranchId = null;
             try {
-                String remoteProjectResponse = client.getProject(remoteProjectId);
+                SysMLv2Client remoteClient = new SysMLv2Client(remoteSysmlUrl, getClientForSysmlRemote(remoteName));
+                String remoteProjectResponse = remoteClient.getProject(remoteProjectId);
                 JsonNode remoteProject = mapper.readTree(remoteProjectResponse);
                 if (remoteProject.has("defaultBranch") && remoteProject.get("defaultBranch").has("@id")) {
                     remoteDefaultBranchId = remoteProject.get("defaultBranch").get("@id").asText();
@@ -128,7 +135,6 @@ public class CloneCommand extends SysMLBaseCommand {
             // Step 3: Create project mapping
             info("");
             info("Step 3: Creating project mapping...");
-            SysMLConfigHelper config = new SysMLConfigHelper();
             
             ProjectMapping projectMapping = new ProjectMapping();
             projectMapping.setLocalProjectId(localProjectId);
@@ -158,7 +164,17 @@ public class CloneCommand extends SysMLBaseCommand {
                 }
             }
 
-            // Step 5: Build flexo pull command to fetch the data
+            // Step 5: Build flexo pull command to fetch the data from remote MMS (dev)
+            // Write to a file so Step 6 can push it into local MMS (one pull, no second fetch).
+            Path pullOutputPath;
+            boolean usedTempFile = false;
+            if (outputFile != null && !outputFile.isEmpty()) {
+                pullOutputPath = Path.of(outputFile);
+            } else {
+                pullOutputPath = Files.createTempFile("flexo-clone-", ".ttl");
+                usedTempFile = true;
+            }
+
             info("");
             info("Step 5: Pulling project data...");
             
@@ -186,10 +202,9 @@ public class CloneCommand extends SysMLBaseCommand {
                 debug("Using remote default branch ID: " + remoteDefaultBranchId);
             }
             
-            if (outputFile != null && !outputFile.isEmpty()) {
-                command.add("--output");
-                command.add(outputFile);
-            }
+            // Always write to file so Step 6 can push the same data into local MMS
+            command.add("--output");
+            command.add(pullOutputPath.toString());
             
             if (format != null && !format.isEmpty()) {
                 command.add("--format");
@@ -197,7 +212,7 @@ public class CloneCommand extends SysMLBaseCommand {
             }
 
             if (isVerbose()) {
-                debug("Command: " + String.join(" ", command));
+                debug("Step 5 flexo pull command: " + String.join(" ", command));
             }
 
             // Step 5: Execute the pull command
@@ -207,21 +222,80 @@ public class CloneCommand extends SysMLBaseCommand {
             Process process = pb.start();
             int exitCode = process.waitFor();
             
-            if (exitCode == 0) {
-                info("");
-                success("Clone complete!");
-                info("");
-                info("Local project ID: " + localProjectId);
-                info("Remote project ID: " + remoteProjectId);
-                info("Remote: " + remoteName);
-                info("");
-                info("You can now work with this project using:");
-                info("  flexo sysml pull " + remoteProjectId);
-                info("  flexo sysml push " + remoteProjectId + " -m \"commit message\"");
-            } else {
+            if (exitCode != 0) {
                 error("Clone failed with exit code: " + exitCode);
+                if (usedTempFile) {
+                    try { Files.deleteIfExists(pullOutputPath); } catch (Exception ignore) { }
+                }
                 System.exit(exitCode);
             }
+
+            // Step 6: Push the same data (from Step 5) into local MMS via sysml push so commit list works
+            info("");
+            info("Step 6: Pushing cloned model into local MMS...");
+            try {
+                List<String> pushCmd = new ArrayList<>();
+                pushCmd.add("flexo");
+                pushCmd.add("sysml");
+                pushCmd.add("push");
+                pushCmd.add(localProjectId);
+                if (localDefaultBranchId != null && !localDefaultBranchId.isEmpty()) {
+                    pushCmd.add("--branch");
+                    pushCmd.add(localDefaultBranchId);
+                }
+                pushCmd.add("--message");
+                pushCmd.add("clone from " + remoteName + "/" + remoteProjectId);
+                pushCmd.add("--input");
+                pushCmd.add(pullOutputPath.toString());
+                if (format != null && !format.isEmpty()) {
+                    pushCmd.add("--format");
+                    pushCmd.add(format);
+                }
+
+                if (isVerbose()) {
+                    debug("Step 6 sysml push(local) command: " + String.join(" ", pushCmd));
+                }
+
+                ProcessBuilder pbPush = new ProcessBuilder(pushCmd);
+                pbPush.inheritIO();
+                Process pushProcess = pbPush.start();
+                int pushExit = pushProcess.waitFor();
+
+                if (pushExit == 0) {
+                    success("Step 6: Pushed cloned model into local MMS for SysML project '" + localProjectId
+                            + (localDefaultBranchId != null ? "', branch '" + localDefaultBranchId + "'" : "'")
+                            + ".");
+                } else {
+                    warn("Step 6: sysml push into local MMS failed with exit code " + pushExit + ".");
+                }
+
+                if (usedTempFile) {
+                    try {
+                        Files.deleteIfExists(pullOutputPath);
+                    } catch (Exception ignore) {
+                        // best-effort cleanup
+                    }
+                }
+            } catch (Exception e) {
+                warn("Step 6: Failed to push cloned model into local MMS: " + e.getMessage());
+                if (isVerbose()) {
+                    e.printStackTrace();
+                }
+                if (usedTempFile) {
+                    try { Files.deleteIfExists(pullOutputPath); } catch (Exception ignore) { }
+                }
+            }
+
+            info("");
+            success("Clone complete!");
+            info("");
+            info("Local project ID: " + localProjectId);
+            info("Remote project ID: " + remoteProjectId);
+            info("Remote: " + remoteName);
+            info("");
+            info("You can now work with this project using:");
+            info("  flexo sysml pull " + remoteProjectId);
+            info("  flexo sysml push " + remoteProjectId + " -m \"commit message\"");
 
         } catch (Exception e) {
             error("Clone failed: " + e.getMessage());
