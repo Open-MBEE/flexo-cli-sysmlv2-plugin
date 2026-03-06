@@ -159,15 +159,15 @@ public class PushCommand extends SysMLBaseCommand {
             command.add("--org");
             command.add(flexoOrg);  // Get org from remote config (configurable per remote)
             command.add("--repo");
-            command.add(remoteProjectId);  // Each project is a repo in the org
+            command.add(localProjectId);  // Each project is a repo in the org
             command.add("--remote");
             command.add(remoteName);
             command.add("--message");
             command.add(commitMessage);
             
-            if (remoteBranchId != null && !remoteBranchId.isEmpty()) {
+            if (localBranchId != null && !localBranchId.isEmpty()) {
                 command.add("--branch");
-                command.add(remoteBranchId);
+                command.add(localBranchId);
             }
             
             if (inputFile != null && !inputFile.isEmpty()) {
