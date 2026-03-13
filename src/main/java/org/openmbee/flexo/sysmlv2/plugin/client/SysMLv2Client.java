@@ -164,6 +164,35 @@ public class SysMLv2Client {
     }
 
     /**
+     * Create a project with a specific ID
+     */
+    public String createProjectWithId(String projectId, String name, String description, String defaultBranchId) throws IOException {
+        String url = baseUrl + "/projects";
+
+        // Build JSON body - Include @id field to specify the project ID
+        StringBuilder jsonBody = new StringBuilder();
+        jsonBody.append("{");
+        jsonBody.append("\"@type\":\"Project\"");
+        jsonBody.append(",\"@id\":\"").append(escapeJson(projectId)).append("\"");
+        jsonBody.append(",\"name\":\"").append(escapeJson(name)).append("\"");
+        if (description != null && !description.isEmpty()) {
+            jsonBody.append(",\"description\":\"").append(escapeJson(description)).append("\"");
+        }
+        if (defaultBranchId != null && !defaultBranchId.isEmpty()) {
+            jsonBody.append(",\"defaultBranch\":{\"@id\":\"").append(escapeJson(defaultBranchId)).append("\"}");
+        }
+        jsonBody.append("}");
+
+        HttpPost request = new HttpPost(url);
+        addAuthHeader(request);
+        request.setHeader("Content-Type", "application/json");
+        request.setHeader("Accept", "application/json");
+        request.setEntity(new StringEntity(jsonBody.toString(), ContentType.APPLICATION_JSON));
+
+        return executeRequest(request);
+    }
+
+    /**
      * Update a project
      */
     public String updateProject(String projectId, String name, String description) throws IOException {

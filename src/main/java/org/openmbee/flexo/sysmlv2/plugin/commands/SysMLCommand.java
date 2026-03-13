@@ -18,7 +18,6 @@ import picocli.CommandLine.Option;
         PullCommand.class,
         PushCommand.class,
         RemoteCommand.class,
-        MapCommand.class,
         ProjectCommand.class,
         ElementCommand.class,
         BranchCommand.class,
@@ -40,7 +39,6 @@ public class SysMLCommand extends PluginCommand {
         info("  pull          - Pull model from remote project");
         info("  push          - Push model changes to remote project");
         info("  remote        - Manage remote SysML v2 servers");
-        info("  map           - Manage project mappings (local <-> remote)");
         info("  project       - Manage SysML projects");
         info("  element       - Query and retrieve elements");
         info("  branch        - Manage project branches");

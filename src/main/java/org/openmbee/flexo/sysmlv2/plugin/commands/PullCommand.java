@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.openmbee.flexo.sysmlv2.plugin.client.SysMLv2Client;
 import org.openmbee.flexo.sysmlv2.plugin.config.SysMLConfigHelper;
-import org.openmbee.flexo.sysmlv2.plugin.model.BranchMapping;
-import org.openmbee.flexo.sysmlv2.plugin.model.ProjectMapping;
 import org.openmbee.flexo.sysmlv2.plugin.model.SysMLRemote;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -19,10 +17,10 @@ import java.util.List;
 /**
  * Pull command for SysML v2 - Fetch model from a remote SysML project/branch
  * 
- * This command translates remote project/branch IDs to local flexo IDs using mappings,
- * then delegates to the underlying Flexo CLI pull command.
+ * This command delegates to the underlying Flexo CLI pull command to fetch data
+ * from the remote MMS backend.
  * 
- * Usage: flexo sysml pull <remote-project-id> [options]
+ * Usage: flexo sysml pull <project-id> [options]
  */
 @Command(
     name = "pull",
@@ -31,11 +29,11 @@ import java.util.List;
 )
 public class PullCommand extends SysMLBaseCommand {
 
-    @Parameters(index = "0", description = "Remote project ID")
-    private String remoteProjectId;
+    @Parameters(index = "0", description = "Project ID")
+    private String projectId;
 
-    @Option(names = {"-b", "--branch"}, description = "Remote branch ID (optional)")
-    private String remoteBranchId;
+    @Option(names = {"-b", "--branch"}, description = "Branch ID (optional)")
+    private String branchId;
 
     @Option(names = {"-o", "--output"}, description = "Output file (default: stdout)")
     private String outputFile;
@@ -47,9 +45,9 @@ public class PullCommand extends SysMLBaseCommand {
     public void run() {
         try {
             info("Pulling from remote...");
-            debug("Remote project ID: " + remoteProjectId);
-            if (remoteBranchId != null) {
-                debug("Remote branch ID: " + remoteBranchId);
+            debug("Project ID: " + projectId);
+            if (branchId != null) {
+                debug("Branch ID: " + branchId);
             }
 
             // Step 1: Get remote name from context
@@ -63,27 +61,10 @@ public class PullCommand extends SysMLBaseCommand {
                 }
             }
 
-            // Step 2: Load configuration and mappings
+            // Step 2: Load configuration
             SysMLConfigHelper sysmlConfig = new SysMLConfigHelper();
             
-            // Step 3: Look up project mapping (remote -> local)
-            ProjectMapping projectMapping = sysmlConfig.getProjectMappingByRemote(remoteName, remoteProjectId);
-            String localProjectId;
-            
-            if (projectMapping == null) {
-                // No mapping found - assume this is a local-only project
-                info("  No project mapping found - treating as local-only project");
-                localProjectId = remoteProjectId; // Use the provided ID as local ID
-                remoteProjectId = localProjectId; // Keep them the same
-            } else {
-                localProjectId = projectMapping.getLocalProjectId();
-                
-                info("  Project mapping:");
-                info("    Remote: " + remoteName + "/" + remoteProjectId);
-                info("    Local:  " + localProjectId);
-            }
-
-            // Step 4: Get remote URL
+            // Step 3: Get remote URL
             String remoteUrl = sysmlConfig.getRemoteUrl(remoteName);
             if (remoteUrl == null) {
                 error("Remote '" + remoteName + "' not found in configuration");
@@ -92,48 +73,21 @@ public class PullCommand extends SysMLBaseCommand {
                 return;
             }
 
+            info("  Remote: " + remoteName);
             info("  Remote URL: " + remoteUrl);
 
-            // Step 5: Look up branch mapping (remote -> local)
-            String localBranchId = null;
-            if (remoteBranchId != null && !remoteBranchId.isEmpty()) {
-                // User specified a remote branch - look up its mapping
-                BranchMapping branchMapping = sysmlConfig.getBranchMappingByRemote(localProjectId, remoteBranchId);
-                if (branchMapping == null) {
-                    // No mapping found - assume this is a local-only branch
-                    info("  No branch mapping found - treating as local-only branch");
-                    localBranchId = remoteBranchId; // Use the provided ID as local ID
-                } else {
-                    localBranchId = branchMapping.getLocalBranchId();
-                    info("  Branch mapping:");
-                    info("    Remote: " + remoteBranchId);
-                    info("    Local:  " + localBranchId);
-                }
-            } else {
-                // No branch specified - use remote project's default branch
+            // Step 4: If no branch specified, fetch remote project's default branch
+            if (branchId == null || branchId.isEmpty()) {
                 info("  No branch specified, fetching remote default branch...");
                 try {
                     SysMLv2Client client = new SysMLv2Client(remoteUrl, getClient());
-                    String remoteProjectResponse = client.getProject(remoteProjectId);
+                    String remoteProjectResponse = client.getProject(projectId);
                     ObjectMapper mapper = new ObjectMapper();
                     JsonNode remoteProject = mapper.readTree(remoteProjectResponse);
                     
                     if (remoteProject.has("defaultBranch") && remoteProject.get("defaultBranch").has("@id")) {
-                        String remoteDefaultBranchId = remoteProject.get("defaultBranch").get("@id").asText();
-                        info("  Remote default branch: " + remoteDefaultBranchId);
-                        
-                        // Try to find mapping for remote default branch
-                        BranchMapping branchMapping = sysmlConfig.getBranchMappingByRemote(localProjectId, remoteDefaultBranchId);
-                        if (branchMapping != null) {
-                            localBranchId = branchMapping.getLocalBranchId();
-                            remoteBranchId = remoteDefaultBranchId;
-                            info("  Mapped to local branch: " + localBranchId);
-                        } else {
-                            // No mapping found - assume local-only branch
-                            info("  No branch mapping found - treating as local-only branch");
-                            localBranchId = remoteDefaultBranchId;
-                            remoteBranchId = remoteDefaultBranchId;
-                        }
+                        branchId = remoteProject.get("defaultBranch").get("@id").asText();
+                        info("  Using default branch: " + branchId);
                     }
                 } catch (Exception e) {
                     warn("Failed to fetch remote project's default branch: " + e.getMessage());
@@ -145,7 +99,7 @@ public class PullCommand extends SysMLBaseCommand {
             }
             info("");
 
-            // Step 6: Build flexo pull command
+            // Step 5: Build flexo pull command
             info("Executing: flexo pull...");
             
             // Get Flexo organization name from remote config (defaults to "sysmlv2")
@@ -158,13 +112,13 @@ public class PullCommand extends SysMLBaseCommand {
             command.add("--org");
             command.add(flexoOrg);  // Get org from remote config (configurable per remote)
             command.add("--repo");
-            command.add(remoteProjectId);  // REMOTE project ID for the SysMLv2 API endpoint
+            command.add(projectId);
             command.add("--remote");
             command.add(remoteName);
             
-            if (remoteBranchId != null && !remoteBranchId.isEmpty()) {
+            if (branchId != null && !branchId.isEmpty()) {
                 command.add("--branch");
-                command.add(remoteBranchId);  // REMOTE branch ID for the SysMLv2 API endpoint
+                command.add(branchId);
             }
             
             if (outputFile != null && !outputFile.isEmpty()) {
