@@ -54,6 +54,28 @@ public abstract class SysMLBaseCommand extends PluginCommand {
     }
     
     /**
+     * Get an authenticated client for a specific SysML remote (for clone: local vs remote).
+     * Resolves the Flexo backend remote from sysmlv2.remote.<name>.flexoRemote and builds the client.
+     */
+    protected FlexoMmsClient getClientForSysmlRemote(String sysmlRemoteName) {
+        try {
+            SysMLConfigHelper sysmlConfig = new SysMLConfigHelper();
+            if (sysmlRemoteName == null || sysmlRemoteName.isEmpty()) {
+                sysmlRemoteName = sysmlConfig.getDefaultRemote();
+            }
+            SysMLRemote sysmlRemote = sysmlConfig.getRemote(sysmlRemoteName);
+            String flexoRemoteName = (sysmlRemote != null && sysmlRemote.getFlexoRemote() != null)
+                ? sysmlRemote.getFlexoRemote() : sysmlRemoteName;
+            return createClientForFlexoRemote(flexoRemoteName);
+        } catch (Exception e) {
+            if (isVerbose()) {
+                debug("Failed to get client for SysML remote '" + sysmlRemoteName + "': " + e.getMessage());
+            }
+            return super.getClient();
+        }
+    }
+    
+    /**
      * Create a FlexoMmsClient for a specific Flexo backend remote
      */
     private FlexoMmsClient createClientForFlexoRemote(String remoteName) {
@@ -88,13 +110,17 @@ public abstract class SysMLBaseCommand extends PluginCommand {
                 ? flexoRemote.getLocalJwtSecret()
                 : flexoConfig.getLocalJwtSecret();
             
-            // Create authentication handler with remote-specific settings
+            String bearerToken = flexoRemote.getAuthToken() != null
+                ? flexoRemote.getAuthToken()
+                : flexoConfig.getAuthRemote();
+            
             AuthenticationHandler authHandler = new AuthenticationHandler(
                     authEnabled,
                     sshKeyPath,
                     localMode,
                     localUser,
-                    localJwtSecret
+                    localJwtSecret,
+                    bearerToken
             );
             
             return new FlexoMmsClient(flexoRemote.getUrl(), authHandler);
@@ -105,16 +131,23 @@ public abstract class SysMLBaseCommand extends PluginCommand {
     }
     
     /**
-     * Get the SysML v2 API URL, resolving from remote if specified
+     * Get the SysML v2 API URL for the current remote (--remote or default).
      */
     protected String getSysMLUrl() {
+        return getSysMLUrl(getRemoteName());
+    }
+    
+    /**
+     * Get the SysML v2 API URL for a specific remote name.
+     */
+    protected String getSysMLUrl(String remoteName) {
         try {
             SysMLConfigHelper config = new SysMLConfigHelper();
-            // Get remote from global options via context
-            String remoteName = getConfig().get("sysmlv2.default.remote");
+            if (remoteName == null || remoteName.isEmpty()) {
+                remoteName = config.getDefaultRemote();
+            }
             return config.getRemoteUrl(remoteName);
         } catch (Exception e) {
-            // Fallback to default
             if (isVerbose()) {
                 debug("Failed to resolve remote URL: " + e.getMessage());
                 debug("Using default URL: http://localhost:9000");
@@ -124,9 +157,14 @@ public abstract class SysMLBaseCommand extends PluginCommand {
     }
     
     /**
-     * Get the remote name if specified
+     * Get the remote name: CLI --remote first, then config default.
      */
+    @Override
     protected String getRemoteName() {
+        String fromCli = context != null ? context.getRemoteName() : null;
+        if (fromCli != null && !fromCli.isEmpty()) {
+            return fromCli;
+        }
         try {
             return getConfig().get("sysmlv2.default.remote");
         } catch (Exception e) {

@@ -21,6 +21,8 @@ import java.util.List;
  * then delegates to the underlying Flexo CLI push command.
  * 
  * Usage: flexo sysml push <remote-project-id> [options]
+ * Call with remote project ID (no change to how you call). Internal logic uses remote repo/branch IDs
+ * when pushing to a remote MMS so the target Layer1 finds the repo.
  */
 @Command(
     name = "push",
@@ -70,15 +72,13 @@ public class PushCommand extends SysMLBaseCommand {
             // Step 3: Look up project mapping (remote -> local)
             ProjectMapping projectMapping = sysmlConfig.getProjectMappingByRemote(remoteName, remoteProjectId);
             String localProjectId;
-            
             if (projectMapping == null) {
-                // No mapping found - assume this is a local-only project
                 info("  No project mapping found - treating as local-only project");
-                localProjectId = remoteProjectId; // Use the provided ID as local ID
-                remoteProjectId = localProjectId; // Keep them the same
+                localProjectId = remoteProjectId;
+                remoteProjectId = localProjectId;
             } else {
                 localProjectId = projectMapping.getLocalProjectId();
-                
+                remoteProjectId = projectMapping.getRemoteProjectId();
                 info("  Project mapping:");
                 info("    Remote: " + remoteName + "/" + remoteProjectId);
                 info("    Local:  " + localProjectId);
@@ -157,17 +157,22 @@ public class PushCommand extends SysMLBaseCommand {
             command.add("flexo");
             command.add("push");
             command.add("--org");
-            command.add(flexoOrg);  // Get org from remote config (configurable per remote)
+            command.add(flexoOrg);
+            // When pushing to a non-local remote (e.g. dev), the MMS only knows remote repo/branch IDs.
+            // When pushing to local (origin), use local repo/branch IDs.
+            boolean pushToLocal = "origin".equals(remoteName) || remoteName == null;
+            String repoIdForPush = pushToLocal ? localProjectId : remoteProjectId;
+            String branchIdForPush = pushToLocal ? localBranchId : remoteBranchId;
             command.add("--repo");
-            command.add(localProjectId);  // Each project is a repo in the org
+            command.add(repoIdForPush);
             command.add("--remote");
             command.add(remoteName);
             command.add("--message");
             command.add(commitMessage);
             
-            if (localBranchId != null && !localBranchId.isEmpty()) {
+            if (branchIdForPush != null && !branchIdForPush.isEmpty()) {
                 command.add("--branch");
-                command.add(localBranchId);
+                command.add(branchIdForPush);
             }
             
             if (inputFile != null && !inputFile.isEmpty()) {
