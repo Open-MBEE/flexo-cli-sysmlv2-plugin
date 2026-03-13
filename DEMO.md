@@ -4,21 +4,21 @@ This document provides a complete walkthrough of all flexo-cli-sysmlv2-plugin fe
 
 ## Architecture Overview
 
-**User-Facing IDs**: Users work with REMOTE project and branch IDs (from the SysMLv2 server), similar to how git users work with remote branch names.
+**Unified IDs**: The SysML v2 API now supports user-defined project and branch IDs. Projects and branches use consistent UUIDs across all environments, eliminating the need for ID mapping.
 
-**Internal Mappings**: The plugin maintains internal mappings between REMOTE IDs (user-facing) and LOCAL flexo storage IDs. These mappings are created automatically during `clone` and are transparent to users.
+**Direct Operations**: Users work directly with project and branch UUIDs. When creating projects through the SysML v2 API, you can specify custom IDs or let the system auto-generate them.
 
-**Local-Only Mode**: Projects without mappings are treated as local-only - the plugin uses the provided ID directly without requiring mapping configuration.
+**Simplified Workflow**: No more ID mapping or clone operations needed - projects are identified by the same ID everywhere.
 
 ## Overview
 
 The SysML v2 plugin extends Flexo CLI with commands for interacting with SysML v2 API services. It provides:
 - Git-like remote management for multiple SysML v2 servers
-- Project cloning with automatic ID mapping
-- Pull/push operations using REMOTE project/branch IDs
+- Direct project operations with consistent UUIDs
+- Pull/push operations using project/branch UUIDs
 - Local SysML v2 API deployment via Docker
 - Complete SysML v2 API coverage (projects, elements, branches, commits, etc.)
-- Support for both mapped (synced) and local-only projects
+- Support for user-defined or auto-generated IDs
 
 ## Prerequisites
 
@@ -256,183 +256,69 @@ flexo sysml project delete --project <project-id> --confirm
 
 ---
 
-## Phase 4: Project Cloning and Mapping
+## Phase 4: Working with Multiple Remotes (Optional)
 
-### 4.1 Clone Project from Remote
+### 4.1 Create Project on Remote
 
-Scenario: You have a project on production that you want to work with locally.
+Scenario: You want to create a project on a production remote and work with it locally.
 
 ```bash
-# First, create a project on production (simulated)
-flexo --remote production project create \
+# Create a project on production remote
+flexo --remote production sysml project create \
     --name "Production Model" \
     --description "Production SysML model"
-# Assume this returns: proj-prod-abc123
-
-# Clone the production project to local
-flexo --remote production clone proj-prod-abc123 \
-    --name "Dev Copy of Production Model"
+# Returns: a1b2c3d4-e5f6-7890-abcd-ef1234567890
 ```
 
-Expected output:
-```
-Cloning project from remote...
-  Remote project ID: proj-prod-abc123
-  Remote: production
+The project is created with a UUID that can be used across all environments.
 
-Step 1: Creating new local project...
-  Created local project: c7906e60-ff9f-47da-b876-1968f35671c4
-  Project name: Dev Copy of Production Model
-  Local default branch ID: local-branch-uuid-123
-
-Step 2: Fetching remote project details...
-  Remote default branch ID: remote-branch-uuid-456
-
-Step 3: Creating project mapping...
-  Created project mapping: c7906e60-ff9f-47da-b876-1968f35671c4 <-> production/proj-prod-abc123
-
-Step 4: Creating default branch mapping...
-  Created branch mapping: local-branch-uuid-123 <-> remote-branch-uuid-456
-
-Step 5: Pulling project data...
-[Output from flexo pull command - actual data transfer]
-
-Clone complete!
-
-Local project ID: c7906e60-ff9f-47da-b876-1968f35671c4
-Remote project ID: proj-prod-abc123
-Remote: production
-
-You can now work with this project using REMOTE IDs:
-  flexo sysml pull proj-prod-abc123
-  flexo sysml push proj-prod-abc123 -m "commit message"
-```
-
-### 4.2 Clone Specific Branch
+### 4.2 Sync Between Remotes
 
 ```bash
-# Clone only a specific branch
-flexo --remote production clone proj-prod-abc123 \
-    --branch feature-branch-id \
-    --name "Feature Branch Copy"
+# Pull from production
+flexo --remote production sysml pull a1b2c3d4-e5f6-7890-abcd-ef1234567890 --output model.ttl
+
+# Push to staging (assuming staging has the same project ID)
+flexo --remote staging sysml push a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
+    --message "Sync from production" \
+    --input model.ttl
 ```
 
-**Note**: The `--branch` parameter expects a branch ID (UUID), not a branch name.
+**Note**: Projects use the same UUID across all remotes. No ID translation is needed.
 
 ---
 
-## Phase 5: Project and Branch Mapping
+## Phase 5: Pull and Push Operations
 
-**Note**: Mappings are created automatically when you clone a project. You typically don't need to manage them manually unless you're working with projects created outside the clone workflow.
+**Important**: Use project and branch UUIDs directly in pull/push commands. No ID mapping is required.
 
-### 5.1 View Mappings
-
-```bash
-# List all project mappings
-flexo sysml map list
-
-# Show specific mapping details (use local project ID)
-flexo sysml map show c7906e60-ff9f-47da-b876-1968f35671c4
-```
-
-Expected output:
-```
-Project Mappings:
-
-Local Project ID                      Remote               Remote Project ID
----                                   ---                  ---
-c7906e60-ff9f-47da-b876-1968f35671c4  production           proj-prod-abc123
-```
-
-### 5.2 Manual Mapping Creation
+### 5.1 Pull Model from Remote
 
 ```bash
-# Create manual mapping (if you created a project outside of clone)
-# Syntax: flexo sysml map add <local-project-id> <remote-name> <remote-project-id>
-flexo sysml map add c7906e60-ff9f-47da-b876-1968f35671c4 production proj-prod-abc123
+# Pull from project using project UUID (uses default branch)
+flexo sysml pull a1b2c3d4-e5f6-7890-abcd-ef1234567890 --output current-model.ttl
 
-# Add branch mapping
-# Syntax: flexo sysml map add-branch <local-project-id> <local-branch-id> <remote-branch-id>
-flexo sysml map add-branch c7906e60-ff9f-47da-b876-1968f35671c4 \
-    local-branch-guid \
-    remote-branch-guid
-```
-
-### 5.3 Lookup Operations
-
-```bash
-# Find local project ID from remote project ID
-flexo sysml map lookup proj-prod-abc123
-
-# Lookup with specific remote
-flexo sysml map lookup proj-prod-abc123 --remote-name production
-```
-
-Expected output:
-```
-Found mapping:
-  Remote Project ID: proj-prod-abc123
-  Remote Name:       production
-  Local Project ID:  c7906e60-ff9f-47da-b876-1968f35671c4
-
-Note: Use the REMOTE project ID (proj-prod-abc123) in your commands:
-  flexo sysml pull proj-prod-abc123
-  flexo sysml push proj-prod-abc123 -m "commit message"
-```
-
-### 5.4 List Branch Mappings
-
-```bash
-# List branch mappings for a project (use local project ID)
-flexo sysml map list-branches c7906e60-ff9f-47da-b876-1968f35671c4
-```
-
-### 5.5 Remove Mappings
-
-```bash
-# Remove branch mapping (use local project ID and local branch ID)
-flexo sysml map remove-branch c7906e60-ff9f-47da-b876-1968f35671c4 local-branch-guid
-
-# Remove project mapping (use local project ID)
-flexo sysml map remove c7906e60-ff9f-47da-b876-1968f35671c4
-```
-
----
-
-## Phase 6: Pull and Push Operations
-
-**Important**: Use REMOTE project and branch IDs in pull/push commands. The plugin automatically handles the mapping to local flexo storage.
-
-### 6.1 Pull Model from Remote
-
-After cloning, you can pull updates from the remote:
-
-```bash
-# Pull from mapped project using REMOTE project ID (uses default branch)
-flexo sysml pull proj-prod-abc123 --output current-model.ttl
-
-# Pull specific branch using REMOTE branch ID
-flexo sysml pull proj-prod-abc123 \
-    --branch remote-branch-guid \
+# Pull specific branch using branch UUID
+flexo sysml pull a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
+    --branch b2c3d4e5-f678-90ab-cdef-1234567890ab \
     --output model.ttl
 
 # Pull in different format
-flexo sysml pull proj-prod-abc123 \
+flexo sysml pull a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
     --format jsonld \
     --output model.jsonld
 
 # Pull to stdout
-flexo sysml pull proj-prod-abc123
+flexo sysml pull a1b2c3d4-e5f6-7890-abcd-ef1234567890
 ```
 
 Expected output:
 ```
 Pulling from remote...
-Remote project ID: proj-prod-abc123
-  Project mapping:
-    Remote: production/proj-prod-abc123
-    Local:  c7906e60-ff9f-47da-b876-1968f35671c4
-  Remote URL: https://sysml.example.com
+  Remote: origin
+  Remote URL: http://localhost:9000
+  No branch specified, fetching remote default branch...
+  Using default branch: 956ed3a2-a156-483c-a9ac-c53f956bd878
 
 Executing: flexo pull...
 Fetched model with 142 statements
@@ -440,100 +326,7 @@ Saved to: current-model.ttl
 Pull completed successfully
 ```
 
-**Local-Only Projects**: If no mapping exists, the plugin treats the provided ID as a local-only project:
-```bash
-# Pull from local-only project (no remote mapping)
-flexo sysml pull local-project-uuid
-# Output: "No project mapping found - treating as local-only project"
-```
-
-### 6.2 Push Model to Remote
-
-Make changes locally and push them back using REMOTE project and branch IDs:
-
-```bash
-# Create or edit a model file
-cat > updated-model.ttl << 'EOF'
-@prefix sysml: <http://www.omg.org/spec/SysML/> .
-@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-
-sysml:NewElement a sysml:Part ;
-    sysml:name "New Component" ;
-    sysml:description "Added in local development" .
-EOF
-
-# Push to remote using REMOTE project ID
-flexo sysml push proj-prod-abc123 \
-    --message "Add new component" \
-    --input updated-model.ttl
-
-# Push to specific branch using REMOTE branch ID
-flexo sysml push proj-prod-abc123 \
-    --branch remote-branch-guid \
-    --message "Update main branch" \
-    --input updated-model.ttl
-
-# Push from stdin
-cat updated-model.ttl | flexo sysml push proj-prod-abc123 \
-    --message "Update from pipeline"
-```
-
-Expected output:
-```
-Pushing to remote...
-Remote project ID: proj-prod-abc123
-  Project mapping:
-    Remote: production/proj-prod-abc123
-    Local:  c7906e60-ff9f-47da-b876-1968f35671c4
-  Remote URL: https://sysml.example.com
-
-Reading model from: updated-model.ttl
-Parsed model with 3 statements
-Executing: flexo push...
-Model pushed successfully
-Commit: commit-abc-xyz-123
-Push completed successfully
-```
-
-### 6.3 Pull/Push Workflow
-
-Complete development workflow using REMOTE IDs:
-
-```bash
-# 1. Clone project
-flexo --remote production clone proj-prod-abc123 --name "Dev Copy"
-# This creates mapping: local-uuid <-> production/proj-prod-abc123
-
-# 2. Pull latest using REMOTE ID
-flexo sysml pull proj-prod-abc123 --output current.ttl
-
-# 3. Make changes (edit current.ttl)
-
-# 4. Push changes using REMOTE ID
-flexo sysml push proj-prod-abc123 \
-    --message "Updated components" \
-    --input current.ttl
-
-# 5. Pull again to verify
-flexo sysml pull proj-prod-abc123 --output verified.ttl
-```
-
-Expected output:
-```
-Pulling from remote...
-Local project ID: proj-local-xyz789
-  Project mapping:
-    Local:  proj-local-xyz789
-    Remote: production/proj-prod-abc123
-  Remote URL: https://sysml.example.com
-
-Executing: flexo pull...
-Fetched model with 142 statements
-Saved to: current-model.ttl
-Pull completed successfully
-```
-
-### 6.2 Push Model to Remote
+### 5.2 Push Model to Remote
 
 Make changes locally and push them back:
 
@@ -548,67 +341,63 @@ sysml:NewElement a sysml:Part ;
     sysml:description "Added in local development" .
 EOF
 
-# Push to remote
-flexo sysml push proj-local-xyz789 \
+# Push to remote using project UUID
+flexo sysml push a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
     --message "Add new component" \
     --input updated-model.ttl
 
-# Push to specific branch
-flexo sysml push proj-local-xyz789 \
-    --branch local-main-guid \
+# Push to specific branch using branch UUID
+flexo sysml push a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
+    --branch b2c3d4e5-f678-90ab-cdef-1234567890ab \
     --message "Update main branch" \
     --input updated-model.ttl
 
 # Push from stdin
-cat updated-model.ttl | flexo sysml push proj-local-xyz789 \
+cat updated-model.ttl | flexo sysml push a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
     --message "Update from pipeline"
 ```
 
 Expected output:
 ```
 Pushing to remote...
-Local project ID: proj-local-xyz789
-  Project mapping:
-    Local:  proj-local-xyz789
-    Remote: production/proj-prod-abc123
-  Remote URL: https://sysml.example.com
+  Remote: origin
+  Remote URL: http://localhost:9000
 
+Executing: flexo push...
 Reading model from: updated-model.ttl
 Parsed model with 3 statements
-Executing: flexo push...
 Model pushed successfully
-Commit: commit-abc-xyz-123
+Commit: 284aa4b0-4e4e-4ff6-bce2-5158a344f3cd
 Push completed successfully
 ```
 
-### 6.3 Pull/Push Workflow
+### 5.3 Pull/Push Workflow
 
 Complete development workflow:
 
 ```bash
-# 1. Clone project
-flexo --remote production clone proj-prod-abc123 --name "Dev Copy"
-# Returns: proj-local-xyz789
+# 1. Create or get project ID
+PROJECT_ID="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
 # 2. Pull latest
-flexo sysml pull proj-local-xyz789 --output current.ttl
+flexo sysml pull $PROJECT_ID --output current.ttl
 
 # 3. Make changes (edit current.ttl)
 
 # 4. Push changes
-flexo sysml push proj-local-xyz789 \
+flexo sysml push $PROJECT_ID \
     --message "Updated components" \
     --input current.ttl
 
 # 5. Pull again to verify
-flexo sysml pull proj-local-xyz789 --output verified.ttl
+flexo sysml pull $PROJECT_ID --output verified.ttl
 ```
 
 ---
 
-## Phase 7: Element Operations
+## Phase 6: Element Operations
 
-### 7.1 List Elements
+### 6.1 List Elements
 
 ```bash
 # List elements in a project/commit
@@ -897,66 +686,44 @@ Relationships:
 
 ---
 
-## Phase 13: Local-Only vs Mapped Projects
+## Phase 13: Working Across Multiple Environments
 
-### 13.1 Understanding Project Types
+### 13.1 Understanding Project IDs
 
-The plugin supports two types of projects:
+Projects use consistent UUIDs across all environments. The same project ID works on:
+- Local development (origin remote)
+- Staging servers
+- Production servers
 
-**Mapped Projects** (have remote mappings):
-```bash
-# Created via clone - automatically mapped
-flexo --remote production clone proj-prod-abc123
-
-# Use REMOTE IDs in commands
-flexo sysml pull proj-prod-abc123
-flexo sysml push proj-prod-abc123 -m "update"
-```
-
-**Local-Only Projects** (no remote mappings):
-```bash
-# Created directly on local SysMLv2 API
-flexo sysml project create --name "Local Project"
-# Returns: local-proj-uuid
-
-# Use project UUID directly - plugin treats as local-only
-flexo sysml pull local-proj-uuid
-# Output: "No project mapping found - treating as local-only project"
-```
-
-### 13.2 Working with Local-Only Projects
-
-Local-only projects work without any mapping configuration:
+### 13.2 Creating Projects with Specific IDs
 
 ```bash
-# Pull from local project
-flexo sysml pull local-proj-uuid --output local-model.ttl
+# Create project with auto-generated ID
+flexo sysml project create --name "My Project"
+# Returns: a1b2c3d4-e5f6-7890-abcd-ef1234567890
 
-# Push to local project
-flexo sysml push local-proj-uuid \
-    --message "Local changes" \
-    --input local-model.ttl
-
-# The plugin automatically detects no mapping exists and uses
-# the provided ID as both the remote and local ID
+# Work with it anywhere using the same ID
+flexo sysml pull a1b2c3d4-e5f6-7890-abcd-ef1234567890
+flexo sysml push a1b2c3d4-e5f6-7890-abcd-ef1234567890 -m "update"
 ```
 
-### 13.3 Converting Local-Only to Mapped
+### 13.3 Syncing Across Remotes
 
-If you later want to sync a local project with a remote:
+To sync a project from one environment to another:
 
 ```bash
-# 1. Create corresponding project on remote
-flexo --remote production project create --name "Synced Project"
-# Returns: prod-proj-uuid
+PROJECT_ID="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
-# 2. Create mapping
-flexo sysml map add local-proj-uuid production prod-proj-uuid
+# 1. Pull from production
+flexo --remote production sysml pull $PROJECT_ID --output model.ttl
 
-# 3. Now you can use the remote ID
-flexo sysml pull prod-proj-uuid
-flexo sysml push prod-proj-uuid -m "sync to production"
+# 2. Push to staging
+flexo --remote staging sysml push $PROJECT_ID \
+    --message "Sync from production" \
+    --input model.ttl
 ```
+
+**Note**: Both remotes should have a project with the same UUID. If the project doesn't exist on staging, create it first using the SysML v2 API with the same ID.
 
 ---
 
@@ -976,52 +743,47 @@ flexo sysml remote add production https://sysml.example.com
 ### 14.2 Development Flow
 
 ```bash
-# 1. Clone from production using REMOTE ID
-flexo --remote production clone proj-prod-model \
-    --name "Local Dev Copy"
-# This creates mapping: local-uuid <-> production/proj-prod-model
+# 1. Create project on production
+flexo --remote production sysml project create \
+    --name "Production Model" \
+    --description "Production SysML model"
+# Returns: a1b2c3d4-e5f6-7890-abcd-ef1234567890
 
-# 2. Work locally using REMOTE ID
-flexo sysml pull proj-prod-model --output dev-model.ttl
+PROJECT_ID="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+# 2. Work locally using same project ID
+flexo --remote origin sysml pull $PROJECT_ID --output dev-model.ttl
 # Edit dev-model.ttl
 
-# 3. Push back to production using REMOTE ID
-flexo sysml push proj-prod-model \
+# 3. Push back to production using same project ID
+flexo --remote production sysml push $PROJECT_ID \
     --message "Added new subsystem" \
     --input dev-model.ttl
 
 # 4. Verify on production
-flexo --remote production project get --project proj-prod-model
+flexo --remote production sysml project get --project $PROJECT_ID
 ```
 
 ### 14.3 Staging Workflow
 
 ```bash
-# 1. Clone production to local
-flexo --remote production clone proj-prod-model \
-    --name "Staging Copy"
-# Creates mapping: local-uuid-2 <-> production/proj-prod-model
+PROJECT_ID="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
-# 2. Pull from production using REMOTE ID
-flexo sysml pull proj-prod-model --output staging-model.ttl
+# 1. Pull from production
+flexo --remote production sysml pull $PROJECT_ID --output staging-model.ttl
 
-# 3. Create project on staging
-flexo --remote staging project create \
-    --name "Staging Model" \
-    --description "Staging environment"
-# Returns: proj-staging-abc
+# 2. Ensure project exists on staging (create if needed)
+# Note: Ideally use the same project ID on staging
+flexo --remote staging sysml project get --project $PROJECT_ID || \
+  echo "Create project on staging with same ID via API"
 
-# 4. Create second mapping for staging
-# (This allows same local copy to sync with both production and staging)
-flexo sysml map add local-uuid-2 staging proj-staging-abc
-
-# 5. Push to staging using REMOTE ID
-flexo sysml push proj-staging-abc \
+# 3. Push to staging using same project ID
+flexo --remote staging sysml push $PROJECT_ID \
     --message "Deploy to staging" \
     --input staging-model.ttl
 ```
 
-**Note**: A single local project can be mapped to multiple remotes, enabling promotion workflows from dev → staging → production.
+**Note**: Projects use consistent IDs across environments, simplifying promotion workflows from dev → staging → production.
 
 ---
 
@@ -1038,9 +800,8 @@ Expected:
 ```
 sysmlv2.remote.origin.url=http://localhost:9000
 sysmlv2.remote.production.url=https://sysml.example.com
+sysmlv2.remote.staging.url=https://sysml-staging.example.com
 sysmlv2.default.remote=origin
-sysmlv2.mapping.proj-local-xyz789.remote=production
-sysmlv2.mapping.proj-local-xyz789.remoteProjectId=proj-prod-abc123
 ```
 
 ### 15.2 Configuration Structure
@@ -1048,10 +809,9 @@ sysmlv2.mapping.proj-local-xyz789.remoteProjectId=proj-prod-abc123
 The plugin stores configuration in `~/.flexo/config` with the following keys:
 
 - `sysmlv2.remote.<name>.url` - Remote URLs
+- `sysmlv2.remote.<name>.flexoRemote` - Corresponding Flexo MMS remote (optional)
+- `sysmlv2.remote.<name>.org` - Flexo MMS organization name (optional)
 - `sysmlv2.default.remote` - Default remote name
-- `sysmlv2.mapping.<local-id>.remote` - Project mapping remote
-- `sysmlv2.mapping.<local-id>.remoteProjectId` - Remote project ID
-- `sysmlv2.mapping.<local-id>.branch.<local-branch>.remoteBranchId` - Branch mappings
 
 ---
 
@@ -1200,12 +960,9 @@ nano ~/.flexo/config
 | Command | Description |
 |---------|-------------|
 | `flexo sysml init` | Initialize local SysML v2 API service |
-| `flexo sysml clone` | Clone project from remote to local |
-| `flexo sysml pull` | Pull model from remote (mapped) |
-| `flexo sysml push` | Push model to remote (mapped) |
+| `flexo sysml pull` | Pull model from remote using project UUID |
+| `flexo sysml push` | Push model to remote using project UUID |
 | `flexo sysml remote` | Manage SysML v2 remotes |
-| `flexo sysml map` | Manage project/branch mappings |
-| `flexo sysml map lookup` | Find local ID from remote ID |
 | `flexo sysml project` | Manage projects (create, list, get, update, delete) |
 | `flexo sysml element` | Query elements (list, get, roots) |
 | `flexo sysml branch` | Manage branches (list, get, create, delete) |
@@ -1218,34 +975,35 @@ nano ~/.flexo/config
 
 ## Quick Reference
 
-### Clone and Work Flow
+### Basic Workflow
 
 ```bash
 # Setup
 flexo sysml init
 flexo sysml remote add prod https://sysml.example.com
 
-# Clone (creates mapping automatically)
-flexo --remote prod clone proj-remote-123 --name "Dev Copy"
-# Creates local project and mapping
+# Create project (returns UUID)
+flexo sysml project create --name "My Project"
+# Returns: a1b2c3d4-e5f6-7890-abcd-ef1234567890
 
-# Work using REMOTE project ID
-flexo sysml pull proj-remote-123 --output model.ttl
+# Work with project using UUID
+PROJECT_ID="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+flexo sysml pull $PROJECT_ID --output model.ttl
 # Edit model.ttl
-flexo sysml push proj-remote-123 --message "Update" --input model.ttl
+flexo sysml push $PROJECT_ID --message "Update" --input model.ttl
 ```
 
-### Mapping Management
+### Multi-Environment Workflow
 
 ```bash
-# View mappings
-flexo sysml map list
+# Same project ID works across all environments
+PROJECT_ID="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
-# Lookup (use REMOTE ID)
-flexo sysml map lookup proj-remote-123
+# Pull from production
+flexo --remote prod sysml pull $PROJECT_ID --output model.ttl
 
-# Manual mapping (use LOCAL ID, remote name, REMOTE ID)
-flexo sysml map add local-proj-uuid prod proj-remote-123
+# Push to staging
+flexo --remote staging sysml push $PROJECT_ID --message "Deploy" --input model.ttl
 ```
 
 ---
@@ -1255,4 +1013,5 @@ flexo sysml map add local-proj-uuid prod proj-remote-123
 - Explore the [Flexo CLI Client](../flexo-cli-client/README.md)
 - Read the [Plugin Architecture Guide](../flexo-cli-client/README-PLUGINS.md)
 - Set up [authentication for production](../flexo-cli-client/README.md#authentication)
+- Review the [full README](./README.md) for advanced features
 - Review the [full README](./README.md) for advanced features

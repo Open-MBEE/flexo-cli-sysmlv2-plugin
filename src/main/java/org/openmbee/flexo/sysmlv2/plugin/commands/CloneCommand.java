@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.openmbee.flexo.sysmlv2.plugin.client.SysMLv2Client;
 import org.openmbee.flexo.sysmlv2.plugin.config.SysMLConfigHelper;
-import org.openmbee.flexo.sysmlv2.plugin.model.BranchMapping;
-import org.openmbee.flexo.sysmlv2.plugin.model.ProjectMapping;
 import org.openmbee.flexo.sysmlv2.plugin.model.SysMLRemote;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -20,9 +18,8 @@ import java.util.List;
  * Clone command - Clone a SysML v2 project from a remote
  * 
  * This command:
- * 1. Creates a new local SysML v2 project
- * 2. Creates a project mapping (remote project ID -> local project ID)
- * 3. Delegates to the parent Flexo CLI pull command to fetch the data
+ * 1. Creates a new local SysML v2 project with the same ID as the remote project
+ * 2. Delegates to the parent Flexo CLI pull command to fetch the data
  * 
  * Usage: flexo sysml clone <remote-project-id> [options]
  */
@@ -75,21 +72,51 @@ public class CloneCommand extends SysMLBaseCommand {
             String localSysmlUrl = getSysMLUrl(localSysmlRemoteName);
             String remoteSysmlUrl = getSysMLUrl(remoteName);
 
-            // Step 2: Create a new local project (always on local/origin SysML)
+            // Step 2: Fetch remote project details to get default branch
             info("");
-            info("Step 1: Creating new local project...");
+            info("Step 1: Fetching remote project details...");
+            debug("Using remote SysML v2 API at: " + remoteSysmlUrl + " (remote=" + remoteName + ")");
+            
+            String remoteDefaultBranchId = null;
+            String remoteProjectName = null;
+            try {
+                SysMLv2Client remoteClient = new SysMLv2Client(remoteSysmlUrl, getClientForSysmlRemote(remoteName));
+                String remoteProjectResponse = remoteClient.getProject(remoteProjectId);
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode remoteProject = mapper.readTree(remoteProjectResponse);
+                
+                if (remoteProject.has("defaultBranch") && remoteProject.get("defaultBranch").has("@id")) {
+                    remoteDefaultBranchId = remoteProject.get("defaultBranch").get("@id").asText();
+                    info("  Remote default branch ID: " + remoteDefaultBranchId);
+                }
+                
+                if (remoteProject.has("name")) {
+                    remoteProjectName = remoteProject.get("name").asText();
+                    info("  Remote project name: " + remoteProjectName);
+                }
+            } catch (Exception e) {
+                warn("Failed to fetch remote project details: " + e.getMessage());
+                if (isVerbose()) {
+                    e.printStackTrace();
+                }
+            }
+
+            // Step 3: Create a new local project with the SAME ID as the remote project
+            info("");
+            info("Step 2: Creating new local project with same ID...");
             debug("Using local SysML v2 API at: " + localSysmlUrl + " (remote=" + localSysmlRemoteName + ")");
             
             SysMLv2Client localClient = new SysMLv2Client(localSysmlUrl, getClientForSysmlRemote(localSysmlRemoteName));
             
-            // Use provided name or default to remote project ID
+            // Use provided name or remote project name or generate a default
             String localProjectName = (projectName != null && !projectName.isEmpty()) 
                 ? projectName 
-                : "clone-of-" + remoteProjectId;
+                : (remoteProjectName != null ? remoteProjectName : "clone-of-" + remoteProjectId);
             
-            String response = localClient.createProject(localProjectName, projectDescription);
+            // Create project with the specific ID (same as remote)
+            String response = localClient.createProjectWithId(remoteProjectId, localProjectName, projectDescription, remoteDefaultBranchId);
             
-            // Parse response to get the new project ID and default branch ID
+            // Parse response to verify creation
             ObjectMapper mapper = new ObjectMapper();
             JsonNode project = mapper.readTree(response);
             String localProjectId = project.has("@id") ? project.get("@id").asText() : null;
@@ -98,6 +125,10 @@ public class CloneCommand extends SysMLBaseCommand {
                 error("Failed to create local project: No project ID returned");
                 System.exit(1);
                 return;
+            }
+            
+            if (!localProjectId.equals(remoteProjectId)) {
+                warn("Warning: Local project ID (" + localProjectId + ") differs from remote project ID (" + remoteProjectId + ")");
             }
             
             // Extract local default branch ID from the response
@@ -112,60 +143,7 @@ public class CloneCommand extends SysMLBaseCommand {
                 info("  Local default branch ID: " + localDefaultBranchId);
             }
 
-            // Fetch remote project's default branch ID (from the remote SysML instance)
-            info("");
-            info("Step 2: Fetching remote project details...");
-            debug("Using remote SysML v2 API at: " + remoteSysmlUrl + " (remote=" + remoteName + ")");
-            String remoteDefaultBranchId = null;
-            try {
-                SysMLv2Client remoteClient = new SysMLv2Client(remoteSysmlUrl, getClientForSysmlRemote(remoteName));
-                String remoteProjectResponse = remoteClient.getProject(remoteProjectId);
-                JsonNode remoteProject = mapper.readTree(remoteProjectResponse);
-                if (remoteProject.has("defaultBranch") && remoteProject.get("defaultBranch").has("@id")) {
-                    remoteDefaultBranchId = remoteProject.get("defaultBranch").get("@id").asText();
-                    info("  Remote default branch ID: " + remoteDefaultBranchId);
-                }
-            } catch (Exception e) {
-                warn("Failed to fetch remote project details: " + e.getMessage());
-                if (isVerbose()) {
-                    e.printStackTrace();
-                }
-            }
-
-            // Step 3: Create project mapping
-            info("");
-            info("Step 3: Creating project mapping...");
-            
-            ProjectMapping projectMapping = new ProjectMapping();
-            projectMapping.setLocalProjectId(localProjectId);
-            projectMapping.setRemoteName(remoteName);
-            projectMapping.setRemoteProjectId(remoteProjectId);
-            config.setProjectMapping(projectMapping);
-            config.save();
-            
-            success("  Created project mapping: " + localProjectId + " <-> " + remoteName + "/" + remoteProjectId);
-
-            // Step 4: Create branch mapping for default branches (if both exist)
-            if (localDefaultBranchId != null && remoteDefaultBranchId != null) {
-                info("");
-                info("Step 4: Creating default branch mapping...");
-                BranchMapping branchMapping = new BranchMapping(localProjectId, localDefaultBranchId, remoteDefaultBranchId);
-                config.setBranchMapping(branchMapping);
-                config.save();
-                success("  Created branch mapping: " + localDefaultBranchId + " <-> " + remoteDefaultBranchId);
-            } else {
-                info("");
-                info("Step 4: Skipping branch mapping (default branch not available on both local and remote)");
-                if (localDefaultBranchId == null) {
-                    debug("  Local project has no default branch");
-                }
-                if (remoteDefaultBranchId == null) {
-                    debug("  Remote project has no default branch");
-                }
-            }
-
-            // Step 5: Build flexo pull command to fetch the data from remote MMS (dev)
-            // Write to a file so Step 6 can push it into local MMS (one pull, no second fetch).
+            // Step 4: Build flexo pull command to fetch the data from remote MMS
             Path pullOutputPath;
             boolean usedTempFile = false;
             if (outputFile != null && !outputFile.isEmpty()) {
@@ -176,7 +154,7 @@ public class CloneCommand extends SysMLBaseCommand {
             }
 
             info("");
-            info("Step 5: Pulling project data...");
+            info("Step 3: Pulling project data...");
             
             // Get Flexo organization name from remote config (defaults to "sysmlv2")
             SysMLRemote remote = config.getRemote(remoteName);
@@ -202,7 +180,7 @@ public class CloneCommand extends SysMLBaseCommand {
                 debug("Using remote default branch ID: " + remoteDefaultBranchId);
             }
             
-            // Always write to file so Step 6 can push the same data into local MMS
+            // Always write to file so Step 4 can push the same data into local MMS
             command.add("--output");
             command.add(pullOutputPath.toString());
             
@@ -212,10 +190,10 @@ public class CloneCommand extends SysMLBaseCommand {
             }
 
             if (isVerbose()) {
-                debug("Step 5 flexo pull command: " + String.join(" ", command));
+                debug("Step 3 flexo pull command: " + String.join(" ", command));
             }
 
-            // Step 5: Execute the pull command
+            // Execute the pull command
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.inheritIO(); // Inherit stdin/stdout/stderr from parent process
             
@@ -230,9 +208,9 @@ public class CloneCommand extends SysMLBaseCommand {
                 System.exit(exitCode);
             }
 
-            // Step 6: Push the same data (from Step 5) into local MMS via sysml push so commit list works
+            // Step 5: Push the same data (from Step 3) into local MMS via sysml push
             info("");
-            info("Step 6: Pushing cloned model into local MMS...");
+            info("Step 4: Pushing cloned model into local MMS...");
             try {
                 List<String> pushCmd = new ArrayList<>();
                 pushCmd.add("flexo");
@@ -253,7 +231,7 @@ public class CloneCommand extends SysMLBaseCommand {
                 }
 
                 if (isVerbose()) {
-                    debug("Step 6 sysml push(local) command: " + String.join(" ", pushCmd));
+                    debug("Step 4 sysml push command: " + String.join(" ", pushCmd));
                 }
 
                 ProcessBuilder pbPush = new ProcessBuilder(pushCmd);
@@ -262,11 +240,11 @@ public class CloneCommand extends SysMLBaseCommand {
                 int pushExit = pushProcess.waitFor();
 
                 if (pushExit == 0) {
-                    success("Step 6: Pushed cloned model into local MMS for SysML project '" + localProjectId
+                    success("Step 4: Pushed cloned model into local MMS for project '" + localProjectId
                             + (localDefaultBranchId != null ? "', branch '" + localDefaultBranchId + "'" : "'")
                             + ".");
                 } else {
-                    warn("Step 6: sysml push into local MMS failed with exit code " + pushExit + ".");
+                    warn("Step 4: sysml push into local MMS failed with exit code " + pushExit + ".");
                 }
 
                 if (usedTempFile) {
@@ -277,7 +255,7 @@ public class CloneCommand extends SysMLBaseCommand {
                     }
                 }
             } catch (Exception e) {
-                warn("Step 6: Failed to push cloned model into local MMS: " + e.getMessage());
+                warn("Step 4: Failed to push cloned model into local MMS: " + e.getMessage());
                 if (isVerbose()) {
                     e.printStackTrace();
                 }
@@ -289,8 +267,7 @@ public class CloneCommand extends SysMLBaseCommand {
             info("");
             success("Clone complete!");
             info("");
-            info("Local project ID: " + localProjectId);
-            info("Remote project ID: " + remoteProjectId);
+            info("Project ID: " + localProjectId);
             info("Remote: " + remoteName);
             info("");
             info("You can now work with this project using:");
