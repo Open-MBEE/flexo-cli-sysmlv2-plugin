@@ -1,6 +1,5 @@
 package org.openmbee.flexo.sysmlv2.plugin.commands;
 
-import org.openmbee.flexo.cli.plugin.PluginCommand;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import org.openmbee.flexo.sysmlv2.plugin.client.SysMLv2Client;
@@ -14,12 +13,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 @Command(
     name = "project",
-    description = "Manage SysML projects"
+    description = "Manage SysML projects",
+    subcommands = {
+        ProjectCommand.ListCommand.class,
+        ProjectCommand.GetCommand.class,
+        ProjectCommand.CreateCommand.class,
+        ProjectCommand.UpdateCommand.class,
+        ProjectCommand.DeleteCommand.class
+    }
 )
-public class ProjectCommand extends PluginCommand {
+public class ProjectCommand extends SysMLBaseCommand {
 
     @Command(name = "list", description = "List all projects")
-    public static class ListCommand extends PluginCommand {
+    public static class ListCommand extends SysMLBaseCommand {
         @Option(names = {"--page"}, description = "Page number (default: 0)")
         private int page = 0;
 
@@ -29,10 +35,12 @@ public class ProjectCommand extends PluginCommand {
         @Override
         public void run() {
             try {
+                String url = getSysMLUrl();
+                debug("Using SysML v2 API at: " + url);
                 debug("Listing projects (page=" + page + ", size=" + size + ")");
 
                 SysMLv2Client client = new SysMLv2Client(
-                    getConfig().getMmsUrl(),
+                    url,
                     getClient()
                 );
 
@@ -69,17 +77,19 @@ public class ProjectCommand extends PluginCommand {
     }
 
     @Command(name = "get", description = "Get project details")
-    public static class GetCommand extends PluginCommand {
+    public static class GetCommand extends SysMLBaseCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
         @Override
         public void run() {
             try {
+                String url = getSysMLUrl();
+                debug("Using SysML v2 API at: " + url);
                 debug("Getting project: " + projectId);
 
                 SysMLv2Client client = new SysMLv2Client(
-                    getConfig().getMmsUrl(),
+                    url,
                     getClient()
                 );
 
@@ -115,7 +125,7 @@ public class ProjectCommand extends PluginCommand {
     }
 
     @Command(name = "create", description = "Create a new project")
-    public static class CreateCommand extends PluginCommand {
+    public static class CreateCommand extends SysMLBaseCommand {
         @Option(names = {"--name", "-n"}, required = true, description = "Project name")
         private String name;
 
@@ -125,10 +135,12 @@ public class ProjectCommand extends PluginCommand {
         @Override
         public void run() {
             try {
+                String url = getSysMLUrl();
+                debug("Using SysML v2 API at: " + url);
                 debug("Creating project: " + name);
 
                 SysMLv2Client client = new SysMLv2Client(
-                    getConfig().getMmsUrl(),
+                    url,
                     getClient()
                 );
 
@@ -139,7 +151,15 @@ public class ProjectCommand extends PluginCommand {
                 JsonNode project = mapper.readTree(response);
 
                 String id = project.has("@id") ? project.get("@id").asText() : "unknown";
+                String defaultBranchId = null;
+                if (project.has("defaultBranch") && project.get("defaultBranch").has("@id")) {
+                    defaultBranchId = project.get("defaultBranch").get("@id").asText();
+                }
+                
                 success("Created project: " + id);
+                if (defaultBranchId != null) {
+                    info("Default branch ID: " + defaultBranchId);
+                }
 
                 if (isVerbose()) {
                     info("");
@@ -158,7 +178,7 @@ public class ProjectCommand extends PluginCommand {
     }
 
     @Command(name = "update", description = "Update a project")
-    public static class UpdateCommand extends PluginCommand {
+    public static class UpdateCommand extends SysMLBaseCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
@@ -171,10 +191,12 @@ public class ProjectCommand extends PluginCommand {
         @Override
         public void run() {
             try {
+                String url = getSysMLUrl();
+                debug("Using SysML v2 API at: " + url);
                 debug("Updating project: " + projectId);
 
                 SysMLv2Client client = new SysMLv2Client(
-                    getConfig().getMmsUrl(),
+                    url,
                     getClient()
                 );
 
@@ -201,7 +223,7 @@ public class ProjectCommand extends PluginCommand {
     }
 
     @Command(name = "delete", description = "Delete a project")
-    public static class DeleteCommand extends PluginCommand {
+    public static class DeleteCommand extends SysMLBaseCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
@@ -216,10 +238,12 @@ public class ProjectCommand extends PluginCommand {
             }
 
             try {
+                String url = getSysMLUrl();
+                debug("Using SysML v2 API at: " + url);
                 debug("Deleting project: " + projectId);
 
                 SysMLv2Client client = new SysMLv2Client(
-                    getConfig().getMmsUrl(),
+                    url,
                     getClient()
                 );
 

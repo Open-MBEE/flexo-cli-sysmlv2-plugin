@@ -15,16 +15,21 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 @Command(
     name = "element",
-    description = "Query and retrieve elements"
+    description = "Query and retrieve elements",
+    subcommands = {
+        ElementCommand.ListCommand.class,
+        ElementCommand.GetCommand.class,
+        ElementCommand.RootsCommand.class
+    }
 )
-public class ElementCommand extends PluginCommand {
+public class ElementCommand extends SysMLBaseCommand {
 
     @Command(name = "list", description = "List elements in a project/commit")
-    public static class ListCommand extends PluginCommand {
+    public static class ListCommand extends SysMLBaseCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
-        @Option(names = {"--commit", "-c"}, description = "Commit ID (default: HEAD)")
+        @Option(names = {"--commit"}, description = "Commit ID (default: HEAD)")
         private String commitId = "HEAD";
 
         @Option(names = {"--page"}, description = "Page number (default: 0)")
@@ -32,18 +37,25 @@ public class ElementCommand extends PluginCommand {
 
         @Option(names = {"--size"}, description = "Page size (default: 20)")
         private int size = 20;
+        
+        @Option(names = {"--exclude-used"}, description = "Exclude elements from ProjectUsages")
+        private boolean excludeUsed = false;
 
         @Override
         public void run() {
             try {
+                String url = getSysMLUrl();
+                
                 debug("Listing elements (project=" + projectId + ", commit=" + commitId + ")");
 
                 SysMLv2Client client = new SysMLv2Client(
-                    getConfig().getMmsUrl(),
+                    url,
                     getClient()
                 );
 
-                String response = client.getElements(projectId, commitId, page, size);
+                // Use new API with excludeUsed parameter
+                String response = client.getElements(projectId, commitId, 
+                    excludeUsed ? Boolean.TRUE : null, null, null, size > 0 ? size : null);
 
                 // Parse and display elements
                 ObjectMapper mapper = new ObjectMapper();
@@ -81,11 +93,14 @@ public class ElementCommand extends PluginCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
-        @Option(names = {"--commit", "-c"}, description = "Commit ID (default: HEAD)")
+        @Option(names = {"--commit"}, description = "Commit ID (default: HEAD)")
         private String commitId = "HEAD";
 
         @Parameters(index = "0", description = "Element ID")
         private String elementId;
+        
+        @Option(names = {"--exclude-used"}, description = "Exclude elements from ProjectUsages")
+        private boolean excludeUsed = false;
 
         @Override
         public void run() {
@@ -97,7 +112,9 @@ public class ElementCommand extends PluginCommand {
                     getClient()
                 );
 
-                String response = client.getElement(projectId, commitId, elementId);
+                // Use new API with excludeUsed parameter
+                String response = client.getElement(projectId, commitId, elementId, 
+                    excludeUsed ? Boolean.TRUE : null);
 
                 // Parse and display element details
                 ObjectMapper mapper = new ObjectMapper();
@@ -136,8 +153,11 @@ public class ElementCommand extends PluginCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
-        @Option(names = {"--commit", "-c"}, description = "Commit ID (default: HEAD)")
+        @Option(names = {"--commit"}, description = "Commit ID (default: HEAD)")
         private String commitId = "HEAD";
+        
+        @Option(names = {"--exclude-used"}, description = "Exclude elements from ProjectUsages")
+        private boolean excludeUsed = false;
 
         @Override
         public void run() {
@@ -149,7 +169,9 @@ public class ElementCommand extends PluginCommand {
                     getClient()
                 );
 
-                String response = client.getRootElements(projectId, commitId);
+                // Use new API with excludeUsed parameter
+                String response = client.getRootElements(projectId, commitId, 
+                    excludeUsed ? Boolean.TRUE : null, null, null, null);
 
                 // Parse and display root elements
                 ObjectMapper mapper = new ObjectMapper();

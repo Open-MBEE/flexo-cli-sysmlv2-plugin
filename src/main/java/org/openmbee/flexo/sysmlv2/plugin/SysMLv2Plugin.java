@@ -43,6 +43,23 @@ public class SysMLv2Plugin implements FlexoPlugin {
     public CommandSpec getCommand() {
         SysMLCommand cmd = new SysMLCommand();
         cmd.setContext(context);
-        return CommandSpec.forAnnotatedObject(cmd);
+        CommandSpec spec = CommandSpec.forAnnotatedObject(cmd);
+        
+        // Propagate context to all subcommands
+        propagateContextToSubcommands(spec);
+        
+        return spec;
+    }
+    
+    private void propagateContextToSubcommands(CommandSpec spec) {
+        for (picocli.CommandLine subcommandLine : spec.subcommands().values()) {
+            CommandSpec subcommand = subcommandLine.getCommandSpec();
+            Object userObject = subcommand.userObject();
+            if (userObject instanceof org.openmbee.flexo.cli.plugin.PluginCommand) {
+                ((org.openmbee.flexo.cli.plugin.PluginCommand) userObject).setContext(context);
+            }
+            // Recursively propagate to nested subcommands
+            propagateContextToSubcommands(subcommand);
+        }
     }
 }

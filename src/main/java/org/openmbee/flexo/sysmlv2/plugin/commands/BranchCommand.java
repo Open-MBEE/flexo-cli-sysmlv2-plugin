@@ -12,25 +12,28 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 @Command(
     name = "branch",
-    description = "Manage project branches"
+    description = "Manage project branches",
+    subcommands = {
+        BranchCommand.ListCommand.class,
+        BranchCommand.GetCommand.class,
+        BranchCommand.CreateCommand.class,
+        BranchCommand.DeleteCommand.class
+    }
 )
-public class BranchCommand extends PluginCommand {
+public class BranchCommand extends SysMLBaseCommand {
 
     @Command(name = "list", description = "List branches in a project")
-    public static class ListCommand extends PluginCommand {
+    public static class ListCommand extends SysMLBaseCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
         @Override
         public void run() {
             try {
-                debug("Listing branches for project: " + projectId);
+                String url = getSysMLUrl();
+                debug("Using SysML v2 API at: " + url);
 
-                SysMLv2Client client = new SysMLv2Client(
-                    getConfig().getMmsUrl(),
-                    getClient()
-                );
-
+                SysMLv2Client client = new SysMLv2Client(url, getClient());
                 String response = client.getBranches(projectId);
 
                 ObjectMapper mapper = new ObjectMapper();
@@ -41,7 +44,7 @@ public class BranchCommand extends PluginCommand {
                     for (JsonNode branch : root) {
                         String id = branch.has("@id") ? branch.get("@id").asText() : "unknown";
                         String name = branch.has("name") ? branch.get("name").asText() : id;
-                        info("  " + name);
+                        info("  " + name + " (ID: " + id + ")");
                     }
                 } else {
                     info("No branches found");
@@ -57,10 +60,134 @@ public class BranchCommand extends PluginCommand {
         }
     }
 
+    @Command(name = "get", description = "Get branch details by ID")
+    public static class GetCommand extends SysMLBaseCommand {
+        @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
+        private String projectId;
+
+        @Option(names = {"--branch", "-b"}, required = true, description = "Branch ID")
+        private String branchId;
+
+        @Override
+        public void run() {
+            try {
+                String url = getSysMLUrl();
+                debug("Using SysML v2 API at: " + url);
+                
+                debug("Getting branch: " + branchId);
+
+                SysMLv2Client client = new SysMLv2Client(url, getClient());
+                String response = client.getBranch(projectId, branchId);
+
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode branch = mapper.readTree(response);
+
+                info("Branch Details:");
+                info("  ID: " + (branch.has("@id") ? branch.get("@id").asText() : "unknown"));
+                if (branch.has("name")) {
+                    info("  Name: " + branch.get("name").asText());
+                }
+                if (branch.has("description")) {
+                    info("  Description: " + branch.get("description").asText());
+                }
+
+                if (isVerbose()) {
+                    info("");
+                    info("Full JSON:");
+                    info(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(branch));
+                }
+
+            } catch (Exception e) {
+                error("Failed to get branch: " + e.getMessage());
+                if (isVerbose()) {
+                    e.printStackTrace();
+                }
+                System.exit(1);
+            }
+        }
+    }
+
+    @Command(name = "create", description = "Create a new branch")
+    public static class CreateCommand extends SysMLBaseCommand {
+        @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
+        private String projectId;
+
+        @Option(names = {"--name", "-n"}, required = true, description = "Branch name")
+        private String name;
+
+        @Option(names = {"--description", "-d"}, description = "Branch description")
+        private String description;
+
+        @Override
+        public void run() {
+            try {
+                String url = getSysMLUrl();
+                
+                debug("Creating branch: " + name);
+
+                SysMLv2Client client = new SysMLv2Client(url, getClient());
+                String response = client.createBranch(projectId, name, description);
+
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode branch = mapper.readTree(response);
+
+                String branchId = branch.has("@id") ? branch.get("@id").asText() : "unknown";
+                success("Created branch: " + branchId);
+                info("  Name: " + name);
+
+                if (isVerbose()) {
+                    info("");
+                    info("Full response:");
+                    info(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(branch));
+                }
+
+            } catch (Exception e) {
+                error("Failed to create branch: " + e.getMessage());
+                if (isVerbose()) {
+                    e.printStackTrace();
+                }
+                System.exit(1);
+            }
+        }
+    }
+
+    @Command(name = "delete", description = "Delete a branch")
+    public static class DeleteCommand extends SysMLBaseCommand {
+        @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
+        private String projectId;
+
+        @Option(names = {"--branch", "-b"}, required = true, description = "Branch ID")
+        private String branchId;
+
+        @Override
+        public void run() {
+            try {
+                String url = getSysMLUrl();
+                
+                debug("Deleting branch: " + branchId);
+
+                SysMLv2Client client = new SysMLv2Client(url, getClient());
+                client.deleteBranch(projectId, branchId);
+
+                success("Branch deleted: " + branchId);
+
+            } catch (Exception e) {
+                error("Failed to delete branch: " + e.getMessage());
+                if (isVerbose()) {
+                    e.printStackTrace();
+                }
+                System.exit(1);
+            }
+        }
+    }
+
     @Override
     public void run() {
         info("Branch commands:");
-        info("  list - List branches in a project");
+        info("  list   - List branches in a project");
+        info("  get    - Get branch details by ID");
+        info("  create - Create a new branch");
+        info("  delete - Delete a branch");
         info("");
         info("Use 'flexo sysml branch <command> --help' for more information");
     }
