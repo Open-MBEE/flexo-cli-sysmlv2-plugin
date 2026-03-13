@@ -465,9 +465,32 @@ public class SysMLv2Client {
      * @return JSON response with created branch
      */
     public String createBranch(String projectId, String name, String description) throws IOException {
+        // First, get the project to find the default branch
+        String projectJson = getProject(projectId);
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        com.fasterxml.jackson.databind.JsonNode projectNode = mapper.readTree(projectJson);
+        
+        // Extract default branch ID
+        com.fasterxml.jackson.databind.JsonNode defaultBranchNode = projectNode.get("defaultBranch");
+        if (defaultBranchNode == null || !defaultBranchNode.has("@id")) {
+            throw new IOException("Project does not have a default branch");
+        }
+        String defaultBranchId = defaultBranchNode.get("@id").asText();
+        
+        // Get the default branch to find its HEAD commit
+        String branchJson = getBranch(projectId, defaultBranchId);
+        com.fasterxml.jackson.databind.JsonNode branchNode = mapper.readTree(branchJson);
+        
+        // Extract HEAD commit ID
+        com.fasterxml.jackson.databind.JsonNode headNode = branchNode.get("head");
+        if (headNode == null || !headNode.has("@id")) {
+            throw new IOException("Default branch does not have a HEAD commit");
+        }
+        String headCommitId = headNode.get("@id").asText();
+        
         String url = baseUrl + "/projects/" + projectId + "/branches";
         
-        // Build JSON body
+        // Build JSON body with required head field
         StringBuilder jsonBody = new StringBuilder();
         jsonBody.append("{");
         jsonBody.append("\"@type\":\"Branch\"");
@@ -475,6 +498,8 @@ public class SysMLv2Client {
         if (description != null && !description.isEmpty()) {
             jsonBody.append(",\"description\":\"").append(escapeJson(description)).append("\"");
         }
+        // Add required head field pointing to the HEAD commit of the default branch
+        jsonBody.append(",\"head\":{\"@id\":\"").append(escapeJson(headCommitId)).append("\"}");
         jsonBody.append("}");
         
         HttpPost request = new HttpPost(url);
