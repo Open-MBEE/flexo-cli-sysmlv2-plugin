@@ -19,10 +19,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
         QueryCommand.ExecuteCommand.class
     }
 )
-public class QueryCommand extends PluginCommand {
+public class QueryCommand extends SysMLBaseCommand {
 
     @Command(name = "list", description = "List queries in a project")
-    public static class ListCommand extends PluginCommand {
+    public static class ListCommand extends SysMLBaseCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
@@ -32,7 +32,7 @@ public class QueryCommand extends PluginCommand {
                 debug("Listing queries for project: " + projectId);
 
                 SysMLv2Client client = new SysMLv2Client(
-                    getConfig().getMmsUrl(),
+                    getSysMLUrl(),
                     getClient()
                 );
 
@@ -62,7 +62,7 @@ public class QueryCommand extends PluginCommand {
     }
 
     @Command(name = "get", description = "Get query details by ID")
-    public static class GetCommand extends PluginCommand {
+    public static class GetCommand extends SysMLBaseCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
@@ -75,7 +75,7 @@ public class QueryCommand extends PluginCommand {
                 debug("Getting query: " + queryId);
 
                 SysMLv2Client client = new SysMLv2Client(
-                    getConfig().getMmsUrl(),
+                    getSysMLUrl(),
                     getClient()
                 );
 
@@ -107,7 +107,7 @@ public class QueryCommand extends PluginCommand {
     }
 
     @Command(name = "execute", description = "Execute a query and get results")
-    public static class ExecuteCommand extends PluginCommand {
+    public static class ExecuteCommand extends SysMLBaseCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
@@ -127,7 +127,7 @@ public class QueryCommand extends PluginCommand {
                 }
 
                 SysMLv2Client client = new SysMLv2Client(
-                    getConfig().getMmsUrl(),
+                    getSysMLUrl(),
                     getClient()
                 );
 

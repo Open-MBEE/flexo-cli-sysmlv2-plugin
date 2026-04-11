@@ -20,6 +20,13 @@ The SysML v2 plugin extends Flexo CLI with commands for interacting with SysML v
 - Complete SysML v2 API coverage (projects, elements, branches, commits, etc.)
 - Support for user-defined or auto-generated IDs
 
+## Key Requirements
+
+**Element IDs Must Be UUIDs**: The SysML v2 API requires element IDs to be UUIDs. When pushing model data:
+- Use `urn:uuid:<uuid>` format for element URIs in RDF data
+- Example: `<urn:uuid:550e8400-e29b-41d4-a716-446655440001> a sysml:PartDefinition ;`
+- Non-UUID element IDs will work with `element list` but will fail with `element get`, `element roots`, and `relationship` operations
+
 ## Prerequisites
 
 ```bash
@@ -47,26 +54,27 @@ flexo init
 
 ## Phase 0: Setup Dedicated SysML v2 Organization
 
-Before using the SysML v2 plugin, create a dedicated organization in Flexo MMS to avoid conflicts with existing data:
+Before using the SysML v2 plugin, create a dedicated organization in Flexo MMS:
 
 ```bash
 # Create sysmlv2 organization in Flexo MMS
-flexo init --org sysmlv2 --repo default
+# Use a UUID for the repo name to avoid project list issues
+flexo init --org sysmlv2 --repo 00000000-0000-0000-0000-000000000000
 
 # This creates:
 # - Organization: sysmlv2
-# - Default repository: default
+# - Default repository: 00000000-0000-0000-0000-000000000000 (UUID format)
 ```
 
 Expected output:
 ```
 Initializing Flexo MMS...
 Creating organization: sysmlv2
-Creating repository: default
+Creating repository: 00000000-0000-0000-0000-000000000000
 Initialization complete!
 ```
 
-**Note**: The SysML v2 service will use this organization to store projects as UUID-based repositories.
+**Note**: Using a UUID for the default repo name ensures the `project list` command works correctly. The SysML v2 API requires all project IDs to be UUIDs.
 
 ---
 
@@ -96,7 +104,7 @@ This will:
   2. Create remote 'origin' with URL: http://localhost:9000
 Starting SysML v2 API service...
   Using docker-compose file: /tmp/sysmlv2-docker-compose-...yml
-  Fuseki started
+  sysmlv2-service started
   Waiting for service on port 9000...
   sysmlv2-service is ready
   sysmlv2-service is healthy
@@ -121,10 +129,8 @@ docker ps | grep sysmlv2
 Expected output:
 ```
 CONTAINER ID   IMAGE                           ...   PORTS                    NAMES
-abc123...      openmbee/flexo-sysmlv2:v0.1.0   ...   0.0.0.0:9000->9000/tcp   sysmlv2-service
+abc123...      openmbee/flexo-sysmlv2:latest   ...   0.0.0.0:9000->9000/tcp   sysmlv2-service
 ```
-
-**Note**: The `flexo sysml project list` command may return errors if the backend organization contains non-UUID repository IDs. This is expected if using an existing Flexo MMS instance. Individual project operations (create, get, update) will work correctly with UUID-based projects created through the SysML v2 API.
 
 ---
 
@@ -140,7 +146,7 @@ flexo sysml remote ls
 
 Expected output:
 ```
-SysML v2 Remotes:
+Configured SysML v2 remotes:
   origin * - http://localhost:9000
 ```
 
@@ -159,7 +165,7 @@ flexo sysml remote list
 
 Expected:
 ```
-SysML v2 Remotes:
+Configured SysML v2 remotes:
   origin - http://localhost:9000
   staging - https://sysml-staging.example.com
   production * - https://sysml.example.com
@@ -169,7 +175,7 @@ SysML v2 Remotes:
 
 ```bash
 # Show remote details
-flexo sysml remote show production
+flexo sysml remote show origin
 
 # Update remote URL
 flexo sysml remote set-url staging https://new-staging.example.com
@@ -189,17 +195,16 @@ flexo sysml remote remove dev
 
 ```bash
 # Create project on local instance
-flexo sysml project create --name "Demo Project" --description "Project for demonstration"
+flexo --remote origin sysml project create --name "Demo Project" --description "Project for demonstration"
 
 # Create on specific remote
-flexo --remote staging project create --name "Staging Project"
+flexo --remote staging sysml project create --name "Staging Project"
 ```
 
 Expected output:
 ```
-Using SysML v2 API at: http://localhost:9000
-Creating project: Demo Project
 Created project: c7906e60-ff9f-47da-b876-1968f35671c4
+Default branch ID: 88299563-581f-45e0-978a-99b5a70b5d2b
 ```
 
 Save the project ID for later use: `c7906e60-ff9f-47da-b876-1968f35671c4`
@@ -208,20 +213,16 @@ Save the project ID for later use: `c7906e60-ff9f-47da-b876-1968f35671c4`
 
 ### 3.2 List Projects
 
-**Important Limitation**: The `flexo sysml project list` command may fail with HTTP 500 error if the backend organization contains repositories with non-UUID IDs (e.g., "default", "localrepo"). This happens because:
+```bash
+# List all projects
+flexo --remote origin sysml project list
+```
 
-1. The SysML v2 API standard requires all project IDs to be UUIDs
-2. The backend may contain repos created with string IDs via `flexo init`
-3. The list endpoint attempts to convert all backend repos to SysML v2 projects and fails on non-UUID IDs
-
-**Workaround**: Use individual project operations (`get`, `update`, `delete`) which work correctly with UUID-based projects created through the SysML v2 API. Alternatively, use a dedicated backend organization that contains only SysML v2-created projects.
+**Troubleshooting**: If `project list` returns HTTP 500 error, ensure your organization was created with UUID-based repo names (see Phase 0). If the organization has non-UUID repos, use individual project operations instead:
 
 ```bash
-# List projects (may fail if backend has non-UUID repos)
-# flexo sysml project list
-
-# Instead, get individual projects by ID
-flexo sysml project get --project c7906e60-ff9f-47da-b876-1968f35671c4
+# Get individual project by ID
+flexo --remote origin sysml project get --project c7906e60-ff9f-47da-b876-1968f35671c4
 ```
 
 Expected:
@@ -236,224 +237,30 @@ Project Details:
 
 ```bash
 # Get project details
-flexo sysml project get --project c7906e60-ff9f-47da-b876-1968f35671c4
+flexo --remote origin sysml project get --project c7906e60-ff9f-47da-b876-1968f35671c4
 
 # Verbose output (shows full JSON)
-flexo sysml -v project get --project c7906e60-ff9f-47da-b876-1968f35671c4
+flexo --remote origin sysml -v project get --project c7906e60-ff9f-47da-b876-1968f35671c4
 ```
 
-### 3.4 Update and Delete Projects
+### 3.4 Update Projects
 
 ```bash
 # Update project
-flexo sysml project update --project c7906e60-ff9f-47da-b876-1968f35671c4 \
+flexo --remote origin sysml project update --project c7906e60-ff9f-47da-b876-1968f35671c4 \
     --name "Demo Project Updated" \
     --description "Updated description"
-
-# Delete project (requires confirmation)
-flexo sysml project delete --project <project-id> --confirm
 ```
 
 ---
 
-## Phase 4: Working with Multiple Remotes (Optional)
+## Phase 4: Branch Operations
 
-### 4.1 Create Project on Remote
-
-Scenario: You want to create a project on a production remote and work with it locally.
+### 4.1 List Branches
 
 ```bash
-# Create a project on production remote
-flexo --remote production sysml project create \
-    --name "Production Model" \
-    --description "Production SysML model"
-# Returns: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-```
-
-The project is created with a UUID that can be used across all environments.
-
-### 4.2 Sync Between Remotes
-
-```bash
-# Pull from production
-flexo --remote production sysml pull a1b2c3d4-e5f6-7890-abcd-ef1234567890 --output model.ttl
-
-# Push to staging (assuming staging has the same project ID)
-flexo --remote staging sysml push a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
-    --message "Sync from production" \
-    --input model.ttl
-```
-
-**Note**: Projects use the same UUID across all remotes. No ID translation is needed.
-
----
-
-## Phase 5: Pull and Push Operations
-
-**Important**: Use project and branch UUIDs directly in pull/push commands. No ID mapping is required.
-
-### 5.1 Pull Model from Remote
-
-```bash
-# Pull from project using project UUID (uses default branch)
-flexo sysml pull a1b2c3d4-e5f6-7890-abcd-ef1234567890 --output current-model.ttl
-
-# Pull specific branch using branch UUID
-flexo sysml pull a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
-    --branch b2c3d4e5-f678-90ab-cdef-1234567890ab \
-    --output model.ttl
-
-# Pull in different format
-flexo sysml pull a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
-    --format jsonld \
-    --output model.jsonld
-
-# Pull to stdout
-flexo sysml pull a1b2c3d4-e5f6-7890-abcd-ef1234567890
-```
-
-Expected output:
-```
-Pulling from remote...
-  Remote: origin
-  Remote URL: http://localhost:9000
-  No branch specified, fetching remote default branch...
-  Using default branch: 956ed3a2-a156-483c-a9ac-c53f956bd878
-
-Executing: flexo pull...
-Fetched model with 142 statements
-Saved to: current-model.ttl
-Pull completed successfully
-```
-
-### 5.2 Push Model to Remote
-
-Make changes locally and push them back:
-
-```bash
-# Create or edit a model file
-cat > updated-model.ttl << 'EOF'
-@prefix sysml: <http://www.omg.org/spec/SysML/> .
-@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-
-sysml:NewElement a sysml:Part ;
-    sysml:name "New Component" ;
-    sysml:description "Added in local development" .
-EOF
-
-# Push to remote using project UUID
-flexo sysml push a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
-    --message "Add new component" \
-    --input updated-model.ttl
-
-# Push to specific branch using branch UUID
-flexo sysml push a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
-    --branch b2c3d4e5-f678-90ab-cdef-1234567890ab \
-    --message "Update main branch" \
-    --input updated-model.ttl
-
-# Push from stdin
-cat updated-model.ttl | flexo sysml push a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
-    --message "Update from pipeline"
-```
-
-Expected output:
-```
-Pushing to remote...
-  Remote: origin
-  Remote URL: http://localhost:9000
-
-Executing: flexo push...
-Reading model from: updated-model.ttl
-Parsed model with 3 statements
-Model pushed successfully
-Commit: 284aa4b0-4e4e-4ff6-bce2-5158a344f3cd
-Push completed successfully
-```
-
-### 5.3 Pull/Push Workflow
-
-Complete development workflow:
-
-```bash
-# 1. Create or get project ID
-PROJECT_ID="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-
-# 2. Pull latest
-flexo sysml pull $PROJECT_ID --output current.ttl
-
-# 3. Make changes (edit current.ttl)
-
-# 4. Push changes
-flexo sysml push $PROJECT_ID \
-    --message "Updated components" \
-    --input current.ttl
-
-# 5. Pull again to verify
-flexo sysml pull $PROJECT_ID --output verified.ttl
-```
-
----
-
-## Phase 6: Element Operations
-
-### 6.1 List Elements
-
-```bash
-# List elements in a project/commit
-flexo sysml element list \
-    --project proj-12345-abc-67890 \
-    --commit commit-abc-123
-
-# With pagination
-flexo sysml element list \
-    --project proj-12345-abc-67890 \
-    --commit commit-abc-123 \
-    --page 0 \
-    --size 20
-```
-
-### 7.2 Get Element Details
-
-```bash
-# Get specific element
-flexo sysml element get \
-    --project proj-12345-abc-67890 \
-    --commit commit-abc-123 \
-    elem-xyz-789
-
-# Verbose output
-flexo sysml -v element get \
-    --project proj-12345-abc-67890 \
-    --commit commit-abc-123 \
-    elem-xyz-789
-```
-
-### 7.3 Get Root Elements
-
-```bash
-# Get root elements in project
-flexo sysml element roots \
-    --project proj-12345-abc-67890 \
-    --commit commit-abc-123
-```
-
----
-
-## Phase 8: Branch Operations
-
-### 8.1 List Branches
-
-```bash
-# List branches in project (using project ID from Phase 3)
-flexo sysml branch list --project 3a912c13-a609-4954-909d-b773be7edb0f
-
-# On specific remote
-flexo --remote production branch list \
-    --project proj-prod-abc123
-
-# With verbose output to see authentication details
-flexo sysml -v branch list --project 3a912c13-a609-4954-909d-b773be7edb0f
+# List branches in project
+flexo --remote origin sysml branch list --project c7906e60-ff9f-47da-b876-1968f35671c4
 ```
 
 Expected output:
@@ -462,12 +269,12 @@ Branches:
   Initial (ID: 88299563-581f-45e0-978a-99b5a70b5d2b)
 ```
 
-### 8.2 Get Branch Details
+### 4.2 Get Branch Details
 
 ```bash
 # Get details for a specific branch
-flexo sysml branch get \
-    --project 3a912c13-a609-4954-909d-b773be7edb0f \
+flexo --remote origin sysml branch get \
+    --project c7906e60-ff9f-47da-b876-1968f35671c4 \
     --branch 88299563-581f-45e0-978a-99b5a70b5d2b
 ```
 
@@ -476,15 +283,14 @@ Expected output:
 Branch Details:
   ID: 88299563-581f-45e0-978a-99b5a70b5d2b
   Name: Initial
-  Description: Default branch
 ```
 
-### 8.3 Create a New Branch
+### 4.3 Create a New Branch
 
 ```bash
 # Create a feature branch
-flexo sysml branch create \
-    --project 3a912c13-a609-4954-909d-b773be7edb0f \
+flexo --remote origin sysml branch create \
+    --project c7906e60-ff9f-47da-b876-1968f35671c4 \
     --name "feature-xyz" \
     --description "Development branch for feature XYZ"
 ```
@@ -495,29 +301,12 @@ Created branch: 12345678-abcd-efgh-ijkl-9876543210ab
   Name: feature-xyz
 ```
 
-### 8.4 Branch Usage in Pull/Push Operations
-
-Branches are primarily used when pulling and pushing model data:
-
-```bash
-# Pull from specific branch (will be covered in Phase 6)
-flexo sysml pull proj-local-xyz789 \
-    --branch local-main-guid \
-    --output model.ttl
-
-# Push to specific branch
-flexo sysml push proj-local-xyz789 \
-    --branch local-main-guid \
-    --message "Update main branch" \
-    --input updated-model.ttl
-```
-
-### 8.5 Delete a Branch
+### 4.4 Delete a Branch
 
 ```bash
 # Delete a feature branch when no longer needed
-flexo sysml branch delete \
-    --project 3a912c13-a609-4954-909d-b773be7edb0f \
+flexo --remote origin sysml branch delete \
+    --project c7906e60-ff9f-47da-b876-1968f35671c4 \
     --branch 12345678-abcd-efgh-ijkl-9876543210ab
 ```
 
@@ -526,193 +315,244 @@ Expected output:
 Branch deleted: 12345678-abcd-efgh-ijkl-9876543210ab
 ```
 
-### 8.6 Branch Mapping for Multi-Environment Workflows
+---
 
-When cloning projects, branch mappings are automatically created to track which local branch corresponds to which remote branch:
+## Phase 5: Pull and Push Operations
+
+### 5.1 Pull Model from Remote
 
 ```bash
-# View branch mappings for a project
-flexo sysml map list-branches proj-local-xyz789
-
-# Manually add branch mapping (if needed)
-flexo sysml map add-branch proj-local-xyz789 \
-    local-branch-id \
-    remote-branch-id
+# Pull from project using project UUID (uses default branch)
+PROJECT_ID="c7906e60-ff9f-47da-b876-1968f35671c4"
+flexo --remote origin sysml pull $PROJECT_ID --output current-model.ttl
 ```
 
 Expected output:
 ```
-Branch mappings for project proj-local-xyz789:
+Pulling from remote...
+  Remote: origin
+  Remote URL: http://localhost:9000
+  No branch specified, fetching remote default branch...
+  Using default branch: 88299563-581f-45e0-978a-99b5a70b5d2b
 
-Local Branch ID           Remote Branch ID
----                       ---
-local-branch-abc          remote-branch-xyz
+Executing: flexo pull...
+Warning: No model data found in branch '88299563-581f-45e0-978a-99b5a70b5d2b'
+Pull completed successfully
 ```
 
----
+### 5.2 Push Model to Remote
 
-## Phase 9: Commit Operations
-
-### 9.1 List Commits
+**Important**: Use UUID-based element IDs in your RDF data for full compatibility with the SysML v2 API:
 
 ```bash
-# List commits in project
-flexo sysml commit list --project proj-12345-abc-67890
-```
+# Create model file with UUID-based element IDs
+cat > model.ttl << 'EOF'
+@prefix sysml: <http://www.omg.org/spec/SysML/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 
-**Note**: The `--branch` flag exists for backward compatibility but is ignored. The SysML v2 API does not support filtering commits by branch name.
+<urn:uuid:550e8400-e29b-41d4-a716-446655440001> a sysml:PartDefinition ;
+    rdfs:label "TestComponent" ;
+    rdfs:comment "A test component for demonstration" .
 
----
+<urn:uuid:550e8400-e29b-41d4-a716-446655440002> a sysml:PartDefinition ;
+    rdfs:label "SubComponent" ;
+    rdfs:comment "A sub-component" .
+EOF
 
-## Phase 10: Query Operations
-
-### 10.1 List Queries
-
-```bash
-# List queries in project
-flexo sysml query list --project proj-12345-abc-67890
-
-# On specific remote
-flexo --remote production query list \
-    --project proj-prod-abc123
-```
-
-### 10.2 Get Query Details
-
-```bash
-# Get details for a specific query
-flexo sysml query get \
-    --project proj-12345-abc-67890 \
-    --query query-uuid-123
+# Push to remote using project UUID
+PROJECT_ID="c7906e60-ff9f-47da-b876-1968f35671c4"
+flexo --remote origin sysml push $PROJECT_ID \
+    --message "Add test components" \
+    --input model.ttl
 ```
 
 Expected output:
 ```
-Query Details:
-  ID: query-uuid-123
-  Type: Query
+Pushing to remote...
+  Remote: origin
+  Remote URL: http://localhost:9000
+  No branch specified, fetching remote default branch...
+  Using default branch: 88299563-581f-45e0-978a-99b5a70b5d2b
+
+Executing: flexo push...
+Reading model from: model.ttl
+Parsed model with 6 statements
+Model pushed successfully
+Commit: success
+Push completed successfully
 ```
 
-### 10.3 Execute a Query
+### 5.3 Pull/Push Workflow
 
 ```bash
-# Execute query at HEAD of default branch
-flexo sysml query execute \
-    --project proj-12345-abc-67890 \
-    --query query-uuid-123
+# Complete development workflow
+PROJECT_ID="c7906e60-ff9f-47da-b876-1968f35671c4"
 
-# Execute query at specific commit (point-in-time query)
-flexo sysml query execute \
-    --project proj-12345-abc-67890 \
-    --query query-uuid-123 \
-    --commit commit-abc-123
+# 1. Pull latest
+flexo --remote origin sysml pull $PROJECT_ID --output current.ttl
+
+# 2. Make changes (edit current.ttl with UUID-based element IDs)
+
+# 3. Push changes
+flexo --remote origin sysml push $PROJECT_ID \
+    --message "Updated components" \
+    --input current.ttl
+
+# 4. Pull again to verify
+flexo --remote origin sysml pull $PROJECT_ID --output verified.ttl
+```
+
+---
+
+## Phase 6: Element Operations
+
+**Note**: Element operations require actual commit UUIDs. The SysML v2 API does not support "HEAD" as a commit ID.
+
+### 6.1 List Commits
+
+```bash
+# Get commit IDs first
+flexo --remote origin sysml commit list --project c7906e60-ff9f-47da-b876-1968f35671c4
 ```
 
 Expected output:
 ```
-Query Results (15 elements):
-  elem-123 (PartDefinition) - Spacecraft
-  elem-456 (AttributeUsage) - mass
-  elem-789 (ConnectionDefinition) - PowerConnection
-  ...
+Commits:
+  ce05acb9-4aa1-4126-949c-fc2a3f6d6538
 ```
 
-**Use Case - Historical Analysis**:
+### 6.2 List Elements
+
 ```bash
-# Execute query at current state
-flexo sysml query execute \
-    --project proj-12345-abc-67890 \
-    --query safety-critical-elements
+# List elements using actual commit ID
+PROJECT_ID="c7906e60-ff9f-47da-b876-1968f35671c4"
+COMMIT_ID="ce05acb9-4aa1-4126-949c-fc2a3f6d6538"
 
-# Execute same query at previous release to compare
-flexo sysml query execute \
-    --project proj-12345-abc-67890 \
-    --query safety-critical-elements \
-    --commit v1.0-release-commit
+flexo --remote origin sysml element list \
+    --project $PROJECT_ID \
+    --commit $COMMIT_ID
+```
 
-# This allows you to see what changed between versions
+Expected output:
+```
+Elements:
+  550e8400-e29b-41d4-a716-446655440002 (PartDefinition)
+  550e8400-e29b-41d4-a716-446655440001 (PartDefinition)
+```
+
+### 6.3 Get Element Details
+
+```bash
+# Get specific element (must use UUID element ID)
+flexo --remote origin sysml element get \
+    --project $PROJECT_ID \
+    --commit $COMMIT_ID \
+    550e8400-e29b-41d4-a716-446655440001
+```
+
+Expected output:
+```
+Element Details:
+  ID: 550e8400-e29b-41d4-a716-446655440001
+```
+
+### 6.4 Get Root Elements
+
+```bash
+# Get root elements in project
+flexo --remote origin sysml element roots \
+    --project $PROJECT_ID \
+    --commit $COMMIT_ID
+```
+
+Expected output:
+```
+Root Elements:
+  550e8400-e29b-41d4-a716-446655440002 (PartDefinition)
+  550e8400-e29b-41d4-a716-446655440001 (PartDefinition)
 ```
 
 ---
 
-## Phase 11: Tag Operations
+## Phase 7: Relationship Operations
 
-### 11.1 List Tags
-
-```bash
-# List tags in project
-flexo sysml tag list --project proj-12345-abc-67890
-
-# On specific remote
-flexo --remote production tag list \
-    --project proj-prod-abc123
-```
-
----
-
-## Phase 12: Relationship Operations
-
-### 12.1 Query Element Relationships
+**Note**: Relationship operations require UUID-based element IDs. Elements with non-UUID IDs will not work.
 
 ```bash
 # List relationships for an element
-flexo sysml relationship list \
-    --project proj-12345-abc-67890 \
-    --commit commit-abc-123 \
-    elem-xyz-789
+PROJECT_ID="c7906e60-ff9f-47da-b876-1968f35671c4"
+COMMIT_ID="ce05acb9-4aa1-4126-949c-fc2a3f6d6538"
+ELEMENT_ID="550e8400-e29b-41d4-a716-446655440001"
 
-# Filter by relationship direction
-flexo sysml relationship list \
-    --project proj-12345-abc-67890 \
-    --commit commit-abc-123 \
-    --direction in \
-    elem-xyz-789
-
-# Exclude elements from ProjectUsages
-flexo sysml relationship list \
-    --project proj-12345-abc-67890 \
-    --commit commit-abc-123 \
-    --exclude-used \
-    elem-xyz-789
+flexo --remote origin sysml relationship list \
+    --project $PROJECT_ID \
+    --commit $COMMIT_ID \
+    $ELEMENT_ID
 ```
 
 Expected output:
 ```
-Relationships:
-  Ownership -> owner-elem-123
-  ConnectionUsage -> connection-elem-456
-  FeatureMembership -> feature-elem-789
+No relationships found
 ```
 
 ---
 
-## Phase 13: Working Across Multiple Environments
+## Phase 8: Query Operations
 
-### 13.1 Understanding Project IDs
+### 8.1 List Queries
+
+```bash
+# List queries in project
+flexo --remote origin sysml query list --project c7906e60-ff9f-47da-b876-1968f35671c4
+```
+
+Expected output:
+```
+No queries found
+```
+
+### 8.2 Execute a Query
+
+```bash
+# Execute query at specific commit
+flexo --remote origin sysml query execute \
+    --project c7906e60-ff9f-47da-b876-1968f35671c4 \
+    --query <query-uuid> \
+    --commit <commit-uuid>
+```
+
+---
+
+## Phase 9: Tag Operations
+
+### 9.1 List Tags
+
+```bash
+# List tags in project
+flexo --remote origin sysml tag list --project c7906e60-ff9f-47da-b876-1968f35671c4
+```
+
+Expected output:
+```
+No tags found
+```
+
+---
+
+## Phase 10: Multi-Environment Workflow
+
+### 10.1 Understanding Project IDs
 
 Projects use consistent UUIDs across all environments. The same project ID works on:
 - Local development (origin remote)
 - Staging servers
 - Production servers
 
-### 13.2 Creating Projects with Specific IDs
+### 10.2 Syncing Across Remotes
 
 ```bash
-# Create project with auto-generated ID
-flexo sysml project create --name "My Project"
-# Returns: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-
-# Work with it anywhere using the same ID
-flexo sysml pull a1b2c3d4-e5f6-7890-abcd-ef1234567890
-flexo sysml push a1b2c3d4-e5f6-7890-abcd-ef1234567890 -m "update"
-```
-
-### 13.3 Syncing Across Remotes
-
-To sync a project from one environment to another:
-
-```bash
-PROJECT_ID="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+PROJECT_ID="c7906e60-ff9f-47da-b876-1968f35671c4"
 
 # 1. Pull from production
 flexo --remote production sysml pull $PROJECT_ID --output model.ttl
@@ -723,73 +563,11 @@ flexo --remote staging sysml push $PROJECT_ID \
     --input model.ttl
 ```
 
-**Note**: Both remotes should have a project with the same UUID. If the project doesn't exist on staging, create it first using the SysML v2 API with the same ID.
-
 ---
 
-## Phase 14: Complete Multi-Environment Workflow
+## Phase 11: Configuration Management
 
-### 14.1 Setup
-
-```bash
-# 1. Initialize local service
-flexo sysml init
-
-# 2. Add staging and production remotes
-flexo sysml remote add staging https://sysml-staging.example.com
-flexo sysml remote add production https://sysml.example.com
-```
-
-### 14.2 Development Flow
-
-```bash
-# 1. Create project on production
-flexo --remote production sysml project create \
-    --name "Production Model" \
-    --description "Production SysML model"
-# Returns: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-
-PROJECT_ID="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-
-# 2. Work locally using same project ID
-flexo --remote origin sysml pull $PROJECT_ID --output dev-model.ttl
-# Edit dev-model.ttl
-
-# 3. Push back to production using same project ID
-flexo --remote production sysml push $PROJECT_ID \
-    --message "Added new subsystem" \
-    --input dev-model.ttl
-
-# 4. Verify on production
-flexo --remote production sysml project get --project $PROJECT_ID
-```
-
-### 14.3 Staging Workflow
-
-```bash
-PROJECT_ID="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-
-# 1. Pull from production
-flexo --remote production sysml pull $PROJECT_ID --output staging-model.ttl
-
-# 2. Ensure project exists on staging (create if needed)
-# Note: Ideally use the same project ID on staging
-flexo --remote staging sysml project get --project $PROJECT_ID || \
-  echo "Create project on staging with same ID via API"
-
-# 3. Push to staging using same project ID
-flexo --remote staging sysml push $PROJECT_ID \
-    --message "Deploy to staging" \
-    --input staging-model.ttl
-```
-
-**Note**: Projects use consistent IDs across environments, simplifying promotion workflows from dev → staging → production.
-
----
-
-## Phase 15: Configuration Management
-
-### 15.1 View Configuration
+### 11.1 View Configuration
 
 ```bash
 # View SysML v2 configuration
@@ -799,134 +577,85 @@ cat ~/.flexo/config | grep sysmlv2
 Expected:
 ```
 sysmlv2.remote.origin.url=http://localhost:9000
-sysmlv2.remote.production.url=https://sysml.example.com
-sysmlv2.remote.staging.url=https://sysml-staging.example.com
 sysmlv2.default.remote=origin
 ```
 
-### 15.2 Configuration Structure
+### 11.2 Configuration Structure
 
 The plugin stores configuration in `~/.flexo/config` with the following keys:
 
 - `sysmlv2.remote.<name>.url` - Remote URLs
 - `sysmlv2.remote.<name>.flexoRemote` - Corresponding Flexo MMS remote (optional)
-- `sysmlv2.remote.<name>.org` - Flexo MMS organization name (optional)
 - `sysmlv2.default.remote` - Default remote name
 
 ---
 
-## Phase 16: Verbose and Debug Output
+## Phase 12: Verbose and Debug Output
 
-### 16.1 Verbose Mode
+### 12.1 Verbose Mode
 
 ```bash
 # Enable verbose output
-flexo sysml -v project list
+flexo --remote origin sysml -v project list
 
-# Verbose clone
-flexo sysml -v --remote production clone proj-prod-abc123
+# Verbose pull
+flexo --remote origin sysml -v pull c7906e60-ff9f-47da-b876-1968f35671c4
 ```
 
-### 16.2 Debug Output
+### 12.2 Debug Output
 
 ```bash
 # Debug shows internal operations
-flexo sysml -v pull proj-local-xyz789
+flexo --remote origin sysml -v pull c7906e60-ff9f-47da-b876-1968f35671c4
 ```
 
 Expected (additional debug lines):
 ```
 Using SysML v2 API at: http://localhost:9000
-Local project ID: proj-local-xyz789
-Mapped remote project ID 'proj-prod-abc123' to local ID 'proj-local-xyz789'
-Command: flexo pull --org proj-prod-abc123 --repo default --remote production
-...
+Command: flexo pull --org sysmlv2 --repo c7906e60-ff9f-47da-b876-1968f35671c4 ...
 ```
 
 ---
 
-## Phase 17: Error Handling
+## Phase 13: Error Handling
 
-### 17.1 No Mapping Found (Treated as Local-Only)
-
-```bash
-# Try to pull from project without mapping
-flexo sysml pull proj-unmapped-123
-```
-
-Expected output:
-```
-Pulling from remote...
-Remote project ID: proj-unmapped-123
-  No project mapping found - treating as local-only project
-  Remote URL: http://localhost:9000
-
-Executing: flexo pull...
-[Proceeds with local-only project]
-```
-
-**Note**: The plugin no longer errors when mappings don't exist - it assumes local-only mode.
-
-### 17.2 Remote Not Found
+### 13.1 Remote Not Found
 
 ```bash
 # Try to use non-existent remote
-flexo --remote nonexistent project list
+flexo --remote nonexistent sysml project list
 ```
 
 Expected error:
 ```
-Remote 'nonexistent' not found in configuration
-Add it with: flexo sysml remote add nonexistent <url>
+Error: Failed to list projects: HTTP 500:
 ```
 
-### 17.3 Project Not Found
+### 13.2 Project Not Found
 
 ```bash
 # Get non-existent project
-flexo sysml project get --project proj-nonexistent
+flexo --remote origin sysml project get --project nonexistent-id
 ```
 
 Expected error:
 ```
-Failed to get project: HTTP 404: Project not found
+Error: Failed to get project: HTTP 400:
 ```
 
----
-
-## Phase 18: Advanced Features
-
-### 18.1 Clone with Custom Name
+### 13.3 Invalid Element ID
 
 ```bash
-# Clone with custom project name
-flexo --remote production clone proj-prod-abc \
-    --name "Custom Local Copy" \
-    --description "Development copy"
+# Try to get element with non-UUID ID
+flexo --remote origin sysml element get \
+    --project $PROJECT_ID \
+    --commit $COMMIT_ID \
+    "http://example.org/SomeElement"
 ```
 
-### 18.2 Multi-Branch Development
-
-```bash
-# Clone project
-flexo --remote production clone proj-prod-abc
-# Creates mapping with default branch
-
-# Create local branch mappings for additional branches
-flexo sysml map add-branch local-proj-uuid \
-    local-feature-branch-uuid \
-    remote-feature-branch-uuid
-
-# Pull specific branch using REMOTE branch ID
-flexo sysml pull proj-prod-abc \
-    --branch remote-feature-branch-uuid \
-    --output feature.ttl
-
-# Push to specific branch using REMOTE branch ID
-flexo sysml push proj-prod-abc \
-    --branch remote-feature-branch-uuid \
-    --message "Feature update" \
-    --input feature.ttl
+Expected error:
+```
+Error: Failed to get element: HTTP 400:
 ```
 
 ---
@@ -939,8 +668,8 @@ flexo sysml push proj-prod-abc \
 # Stop SysML v2 service
 docker stop sysmlv2-service
 
-# Or using docker-compose
-docker-compose -f sysmlv2-docker-compose.yml down
+# Stop all Flexo services
+docker stop sysmlv2-service layer1-service quad-store-server
 ```
 
 ### Clear Configuration
@@ -948,9 +677,6 @@ docker-compose -f sysmlv2-docker-compose.yml down
 ```bash
 # Remove SysML v2 configuration
 rm ~/.flexo/config
-
-# Or manually edit to remove sysmlv2.* entries
-nano ~/.flexo/config
 ```
 
 ---
@@ -960,14 +686,14 @@ nano ~/.flexo/config
 | Command | Description |
 |---------|-------------|
 | `flexo sysml init` | Initialize local SysML v2 API service |
-| `flexo sysml pull` | Pull model from remote using project UUID |
-| `flexo sysml push` | Push model to remote using project UUID |
+| `flexo sysml pull <project-id>` | Pull model from remote using project UUID |
+| `flexo sysml push <project-id>` | Push model to remote using project UUID |
 | `flexo sysml remote` | Manage SysML v2 remotes |
 | `flexo sysml project` | Manage projects (create, list, get, update, delete) |
 | `flexo sysml element` | Query elements (list, get, roots) |
 | `flexo sysml branch` | Manage branches (list, get, create, delete) |
 | `flexo sysml commit` | List commits |
-| `flexo sysml query` | Manage and execute queries (list, get, execute) |
+| `flexo sysml query` | Manage and execute queries |
 | `flexo sysml tag` | List tags |
 | `flexo sysml relationship` | Query relationships |
 
@@ -979,32 +705,36 @@ nano ~/.flexo/config
 
 ```bash
 # Setup
+flexo init --org sysmlv2 --repo 00000000-0000-0000-0000-000000000000
 flexo sysml init
-flexo sysml remote add prod https://sysml.example.com
 
 # Create project (returns UUID)
-flexo sysml project create --name "My Project"
-# Returns: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+flexo --remote origin sysml project create --name "My Project"
+# Returns: c7906e60-ff9f-47da-b876-1968f35671c4
+
+# Create model with UUID element IDs
+cat > model.ttl << 'EOF'
+<urn:uuid:550e8400-e29b-41d4-a716-446655440001> a <http://www.omg.org/spec/SysML/PartDefinition> ;
+    <http://www.w3.org/2000/01/rdf-schema#label> "Component" .
+EOF
 
 # Work with project using UUID
-PROJECT_ID="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-flexo sysml pull $PROJECT_ID --output model.ttl
-# Edit model.ttl
-flexo sysml push $PROJECT_ID --message "Update" --input model.ttl
+PROJECT_ID="c7906e60-ff9f-47da-b876-1968f35671c4"
+flexo --remote origin sysml push $PROJECT_ID --message "Initial model" --input model.ttl
+flexo --remote origin sysml pull $PROJECT_ID --output current.ttl
+
+# Get commit ID for element operations
+flexo --remote origin sysml commit list --project $PROJECT_ID
+
+# List elements
+flexo --remote origin sysml element list --project $PROJECT_ID --commit <commit-uuid>
 ```
 
-### Multi-Environment Workflow
+### Element ID Requirements
 
-```bash
-# Same project ID works across all environments
-PROJECT_ID="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-
-# Pull from production
-flexo --remote prod sysml pull $PROJECT_ID --output model.ttl
-
-# Push to staging
-flexo --remote staging sysml push $PROJECT_ID --message "Deploy" --input model.ttl
-```
+- **Must use UUID format**: `<urn:uuid:550e8400-e29b-41d4-a716-446655440001>`
+- **Non-UUID IDs** (like `<http://example.org/Component>`) will work with `element list` but fail with other element operations
+- **Why**: The SysML v2 API parses element IDs as UUIDs for individual element operations
 
 ---
 
@@ -1013,5 +743,4 @@ flexo --remote staging sysml push $PROJECT_ID --message "Deploy" --input model.t
 - Explore the [Flexo CLI Client](../flexo-cli-client/README.md)
 - Read the [Plugin Architecture Guide](../flexo-cli-client/README-PLUGINS.md)
 - Set up [authentication for production](../flexo-cli-client/README.md#authentication)
-- Review the [full README](./README.md) for advanced features
 - Review the [full README](./README.md) for advanced features

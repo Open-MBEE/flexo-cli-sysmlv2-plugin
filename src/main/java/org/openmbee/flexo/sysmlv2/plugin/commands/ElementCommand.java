@@ -11,6 +11,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 /**
  * Element query and retrieval commands
  *
+ * Note: The SysML v2 API requires element IDs to be UUIDs. Elements created
+ * via the 'push' command with arbitrary URIs may not work with get/roots
+ * operations. Use the 'list' command to see all elements, or use the SysML v2
+ * API's createCommit endpoint to create elements with proper UUID-based IDs.
+ *
  * Usage: flexo sysml element <subcommand>
  */
 @Command(
@@ -61,6 +66,11 @@ public class ElementCommand extends SysMLBaseCommand {
                 ObjectMapper mapper = new ObjectMapper();
                 JsonNode root = mapper.readTree(response);
 
+                if (isVerbose()) {
+                    debug("Raw response:");
+                    debug(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root));
+                }
+
                 if (root.isArray() && root.size() > 0) {
                     info("Elements:");
                     for (JsonNode element : root) {
@@ -89,7 +99,7 @@ public class ElementCommand extends SysMLBaseCommand {
     }
 
     @Command(name = "get", description = "Get element by ID")
-    public static class GetCommand extends PluginCommand {
+    public static class GetCommand extends SysMLBaseCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
@@ -108,7 +118,7 @@ public class ElementCommand extends SysMLBaseCommand {
                 debug("Getting element: " + elementId);
 
                 SysMLv2Client client = new SysMLv2Client(
-                    getConfig().getMmsUrl(),
+                    getSysMLUrl(),
                     getClient()
                 );
 
@@ -149,7 +159,7 @@ public class ElementCommand extends SysMLBaseCommand {
     }
 
     @Command(name = "roots", description = "Get root elements in a project")
-    public static class RootsCommand extends PluginCommand {
+    public static class RootsCommand extends SysMLBaseCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
@@ -165,7 +175,7 @@ public class ElementCommand extends SysMLBaseCommand {
                 debug("Getting root elements (project=" + projectId + ", commit=" + commitId + ")");
 
                 SysMLv2Client client = new SysMLv2Client(
-                    getConfig().getMmsUrl(),
+                    getSysMLUrl(),
                     getClient()
                 );
 

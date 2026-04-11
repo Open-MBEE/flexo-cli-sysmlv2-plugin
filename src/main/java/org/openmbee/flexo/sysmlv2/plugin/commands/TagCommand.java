@@ -17,10 +17,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
         TagCommand.ListCommand.class
     }
 )
-public class TagCommand extends PluginCommand {
+public class TagCommand extends SysMLBaseCommand {
 
     @Command(name = "list", description = "List tags in a project")
-    public static class ListCommand extends PluginCommand {
+    public static class ListCommand extends SysMLBaseCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
@@ -30,7 +30,7 @@ public class TagCommand extends PluginCommand {
                 debug("Listing tags for project: " + projectId);
 
                 SysMLv2Client client = new SysMLv2Client(
-                    getConfig().getMmsUrl(),
+                    getSysMLUrl(),
                     getClient()
                 );
 

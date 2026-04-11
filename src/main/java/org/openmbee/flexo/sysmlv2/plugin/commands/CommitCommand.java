@@ -17,10 +17,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
         CommitCommand.ListCommand.class
     }
 )
-public class CommitCommand extends PluginCommand {
+public class CommitCommand extends SysMLBaseCommand {
 
     @Command(name = "list", description = "List commits in a project")
-    public static class ListCommand extends PluginCommand {
+    public static class ListCommand extends SysMLBaseCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
@@ -37,7 +37,7 @@ public class CommitCommand extends PluginCommand {
                 }
 
                 SysMLv2Client client = new SysMLv2Client(
-                    getConfig().getMmsUrl(),
+                    getSysMLUrl(),
                     getClient()
                 );
 

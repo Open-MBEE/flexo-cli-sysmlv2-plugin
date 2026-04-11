@@ -10,6 +10,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Relationship query commands
+ *
+ * Note: The SysML v2 API requires element IDs to be UUIDs. Elements created
+ * via the 'push' command with arbitrary URIs may not work with relationship
+ * operations. Use the SysML v2 API's createCommit endpoint to create elements
+ * with proper UUID-based IDs.
  */
 @Command(
     name = "relationship",
@@ -18,10 +23,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
         RelationshipCommand.ListCommand.class
     }
 )
-public class RelationshipCommand extends PluginCommand {
+public class RelationshipCommand extends SysMLBaseCommand {
 
     @Command(name = "list", description = "List relationships for an element")
-    public static class ListCommand extends PluginCommand {
+    public static class ListCommand extends SysMLBaseCommand {
         @Option(names = {"--project", "-p"}, required = true, description = "Project ID")
         private String projectId;
 
@@ -43,7 +48,7 @@ public class RelationshipCommand extends PluginCommand {
                 debug("Listing relationships for element: " + elementId);
 
                 SysMLv2Client client = new SysMLv2Client(
-                    getConfig().getMmsUrl(),
+                    getSysMLUrl(),
                     getClient()
                 );
 
