@@ -1,5 +1,7 @@
 package org.openmbee.flexo.sysmlv2.plugin.commands;
 
+import org.openmbee.flexo.cli.container.ContainerException;
+import org.openmbee.flexo.cli.container.ContainerServiceHelper;
 import org.openmbee.flexo.cli.plugin.PluginCommand;
 import org.openmbee.flexo.sysmlv2.plugin.config.SysMLConfigHelper;
 import org.openmbee.flexo.sysmlv2.plugin.model.SysMLRemote;
@@ -11,16 +13,15 @@ import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URL;
-import java.nio.file.*;
-import java.util.Properties;
 
 /**
  * Init command - Initialize a local SysML v2 API service
- * Automatically starts Docker service and configures the plugin
+ * Automatically starts container service and configures the plugin
+ * Supports Docker, Podman, and Colima container runtimes
  */
 @Command(
         name = "init",
-        description = "Initialize local SysML v2 API service (starts Docker container on port 9000)",
+        description = "Initialize local SysML v2 API service (starts container on port 9000)",
         mixinStandardHelpOptions = true
 )
 public class InitCommand extends PluginCommand {
@@ -30,23 +31,9 @@ public class InitCommand extends PluginCommand {
     private static final int SYSMLV2_PORT = 9000;
     private static final String SERVICE_NAME = "sysmlv2-service";
     
-    // Trusted paths where docker executable is expected to be found
-    private static final String[] TRUSTED_DOCKER_PATHS = {
-        "/usr/bin/docker",           // Linux standard location
-        "/usr/local/bin/docker",     // macOS Homebrew/standard location
-        "/opt/homebrew/bin/docker",  // macOS Apple Silicon Homebrew
-        "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe",  // Windows Docker Desktop
-        "/Applications/Docker.app/Contents/Resources/bin/docker"  // macOS Docker Desktop
-    };
-    
-    private static final String[] TRUSTED_DOCKER_COMPOSE_PATHS = {
-        "/usr/bin/docker-compose",
-        "/usr/local/bin/docker-compose",
-        "/opt/homebrew/bin/docker-compose",
-        "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker-compose.exe"
-    };
+    private ContainerServiceHelper containerHelper;
 
-    @Option(names = {"--skip-docker"}, description = "Skip Docker service startup (assumes service already running)")
+    @Option(names = {"--skip-docker"}, description = "Skip container startup (assumes SysML v2 service already running on port 9000)")
     private boolean skipDocker = false;
 
     @Option(names = {"--url"}, description = "SysML v2 API URL (default: http://localhost:9000)")
@@ -64,9 +51,25 @@ public class InitCommand extends PluginCommand {
     @Override
     public void run() {
         info("Initializing SysML v2 API service...");
+        
+        // Initialize container helper if not skipping Docker
+        if (!skipDocker) {
+            try {
+                containerHelper = new ContainerServiceHelper(getConfig(), isVerbose());
+                info("Using container runtime: " + containerHelper.getRuntimeInfo());
+            } catch (ContainerException e) {
+                error("Failed to initialize container runtime: " + e.getMessage());
+                error("Install Docker/Podman/Colima or use --skip-docker if service is already running");
+                if (isVerbose()) {
+                    e.printStackTrace();
+                }
+                throw new RuntimeException("Container runtime not available", e);
+            }
+        }
+        
         info("This will:");
         if (!skipDocker) {
-            info("  1. Start Docker service (SysML v2 API on port 9000)");
+            info("  1. Start container service (SysML v2 API on port 9000)");
         }
         info("  2. Create remote '" + remoteName + "' with URL: " + sysmlv2Url);
 
@@ -74,7 +77,7 @@ public class InitCommand extends PluginCommand {
             if (!skipDocker) {
                 startSysMLv2Service();
             } else {
-                info("Skipping Docker startup...");
+                info("Skipping container startup...");
                 verifySysMLv2ServiceAvailable();
             }
 
@@ -105,23 +108,16 @@ public class InitCommand extends PluginCommand {
     private void startSysMLv2Service() throws Exception {
         info("Starting SysML v2 API service...");
 
-        File composeFile = extractDockerComposeFromClasspath();
-        if (composeFile == null) {
-            throw new Exception("Docker compose file not found in plugin resources. " +
-                    "Please ensure the plugin is properly packaged.");
-        }
+        // Extract compose file from plugin resources (not parent classloader)
+        File composeFile = extractComposeFileFromPlugin(DOCKER_COMPOSE_FILE);
 
-        info("  Using docker-compose file: " + composeFile.getAbsolutePath());
+        info("  Using compose file: " + composeFile.getAbsolutePath());
 
-        if (!isDockerAvailable()) {
-            throw new Exception("Docker is not available. Please install Docker and ensure it's running.");
-        }
-
-        boolean success = runDockerComposeService(composeFile, SERVICE_NAME);
+        boolean success = containerHelper.startService(composeFile, SERVICE_NAME);
 
         if (!success) {
-            throw new Exception("Failed to start " + SERVICE_NAME + ". Please check Docker logs:\n" +
-                    "  docker logs " + SERVICE_NAME);
+            throw new ContainerException("Failed to start " + SERVICE_NAME + ". Please check container logs:\n" +
+                    "  " + containerHelper.getRuntime().getName() + " logs " + SERVICE_NAME);
         }
 
         success("  " + SERVICE_NAME + " started");
@@ -132,27 +128,7 @@ public class InitCommand extends PluginCommand {
     }
 
     private void waitForSysMLv2Service() throws Exception {
-        int maxAttempts = 30;
-        int attempt = 0;
-        info("  Waiting for service on port " + SYSMLV2_PORT + "...");
-        
-        while (attempt < maxAttempts) {
-            try (Socket socket = new Socket()) {
-                socket.connect(new InetSocketAddress("localhost", SYSMLV2_PORT), 1000);
-                success("  " + SERVICE_NAME + " is ready");
-                return;
-            } catch (Exception e) {
-                attempt++;
-                if (attempt >= maxAttempts) {
-                    throw new Exception(SERVICE_NAME + " did not become ready within timeout. " +
-                            "Please check Docker logs: docker logs " + SERVICE_NAME);
-                }
-                Thread.sleep(2000);
-                if (isVerbose()) {
-                    debug("  Waiting for " + SERVICE_NAME + "... (attempt " + attempt + "/" + maxAttempts + ")");
-                }
-            }
-        }
+        containerHelper.waitForServicePort(SERVICE_NAME, SYSMLV2_PORT, 30, 2000);
     }
 
     private void verifySysMLv2ServiceAvailable() throws Exception {
@@ -201,146 +177,6 @@ public class InitCommand extends PluginCommand {
         warn("  Service health check timed out, proceeding anyway...");
     }
 
-    private File extractDockerComposeFromClasspath() throws Exception {
-        InputStream resourceStream = getClass().getClassLoader()
-                .getResourceAsStream(DOCKER_COMPOSE_FILE);
-        
-        if (resourceStream == null) {
-            return null;
-        }
-
-        // Create temporary file with secure permissions
-        File tempFile;
-        String os = System.getProperty("os.name").toLowerCase();
-        
-        if (os.contains("unix") || os.contains("linux") || os.contains("mac")) {
-            // On Unix-like systems, create file with restrictive permissions
-            tempFile = Files.createTempFile(
-                "sysmlv2-docker-compose-",
-                ".yml",
-                java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
-                    java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")
-                )
-            ).toFile();
-        } else {
-            // On Windows, create file then set restrictive permissions
-            tempFile = Files.createTempFile(
-                "sysmlv2-docker-compose-",
-                ".yml"
-            ).toFile();
-            tempFile.setReadable(false, false);
-            tempFile.setReadable(true, true);
-            tempFile.setWritable(false, false);
-            tempFile.setWritable(true, true);
-            tempFile.setExecutable(false, false);
-        }
-        tempFile.deleteOnExit();
-
-        // Copy resource to temporary file
-        try (FileOutputStream fos = new FileOutputStream(tempFile);
-             BufferedOutputStream bos = new BufferedOutputStream(fos)) {
-            
-            byte[] buffer = new byte[8192];
-            int bytesRead;
-            while ((bytesRead = resourceStream.read(buffer)) != -1) {
-                bos.write(buffer, 0, bytesRead);
-            }
-            bos.flush();
-        } finally {
-            resourceStream.close();
-        }
-
-        if (isVerbose()) {
-            debug("  Extracted docker-compose file to: " + tempFile.getAbsolutePath());
-        }
-
-        return tempFile;
-    }
-
-    private String findDockerExecutable() {
-        for (String path : TRUSTED_DOCKER_PATHS) {
-            File dockerFile = new File(path);
-            if (dockerFile.exists() && dockerFile.canExecute()) {
-                return path;
-            }
-        }
-        return null;
-    }
-
-    private String[] findDockerComposeCommand() {
-        // First try docker compose (preferred, newer approach)
-        String dockerPath = findDockerExecutable();
-        if (dockerPath != null) {
-            try {
-                ProcessBuilder pb = new ProcessBuilder(dockerPath, "compose", "version");
-                pb.redirectErrorStream(true);
-                Process process = pb.start();
-                if (process.waitFor() == 0) {
-                    return new String[] { dockerPath, "compose" };
-                }
-            } catch (Exception e) {
-                // Fall through to try standalone docker-compose
-            }
-        }
-        
-        // Try standalone docker-compose
-        for (String path : TRUSTED_DOCKER_COMPOSE_PATHS) {
-            File composeFile = new File(path);
-            if (composeFile.exists() && composeFile.canExecute()) {
-                return new String[] { path };
-            }
-        }
-        
-        return null;
-    }
-
-    private boolean isDockerAvailable() {
-        String dockerPath = findDockerExecutable();
-        if (dockerPath == null) {
-            return false;
-        }
-        
-        try {
-            ProcessBuilder pb = new ProcessBuilder(dockerPath, "--version");
-            pb.redirectErrorStream(true);
-            Process process = pb.start();
-            int exitCode = process.waitFor();
-            return exitCode == 0;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private boolean runDockerComposeService(File composeFile, String serviceName) throws Exception {
-        String[] composeCommand = findDockerComposeCommand();
-        if (composeCommand == null) {
-            throw new Exception("Docker Compose is not available. Please install Docker Compose.");
-        }
-
-        ProcessBuilder pb = new ProcessBuilder(composeCommand);
-        pb.command().add("-f");
-        pb.command().add(composeFile.getAbsolutePath());
-        pb.command().add("up");
-        pb.command().add("-d");
-        pb.command().add(serviceName);
-        pb.redirectErrorStream(true);
-
-        Process process = pb.start();
-
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (isVerbose()) {
-                    debug("  " + line);
-                }
-            }
-        }
-
-        int exitCode = process.waitFor();
-        return exitCode == 0;
-    }
-
     private void createOrUpdateRemote() throws Exception {
         SysMLConfigHelper config = new SysMLConfigHelper();
         
@@ -371,6 +207,57 @@ public class InitCommand extends PluginCommand {
         
         config.save();
         success("  Remote '" + remoteName + "' configured");
+    }
+
+    /**
+     * Extract compose file from plugin resources
+     * Needed because ContainerServiceHelper uses parent project's classloader
+     */
+    private File extractComposeFileFromPlugin(String resourceName) throws IOException {
+        InputStream resourceStream = getClass().getClassLoader()
+                .getResourceAsStream(resourceName);
+        
+        if (resourceStream == null) {
+            throw new FileNotFoundException("Resource not found in plugin: " + resourceName);
+        }
+        
+        // Create temporary file with secure permissions
+        File tempFile;
+        String os = System.getProperty("os.name").toLowerCase();
+        
+        if (os.contains("unix") || os.contains("linux") || os.contains("mac")) {
+            tempFile = java.nio.file.Files.createTempFile(
+                "sysmlv2-docker-compose-",
+                ".yml",
+                java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
+                    java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")
+                )
+            ).toFile();
+        } else {
+            tempFile = java.nio.file.Files.createTempFile("sysmlv2-docker-compose-", ".yml").toFile();
+            tempFile.setReadable(false, false);
+            tempFile.setReadable(true, true);
+            tempFile.setWritable(false, false);
+            tempFile.setWritable(true, true);
+            tempFile.setExecutable(false, false);
+        }
+        tempFile.deleteOnExit();
+        
+        // Copy resource to temporary file
+        try (FileOutputStream fos = new FileOutputStream(tempFile);
+             BufferedOutputStream bos = new BufferedOutputStream(fos)) {
+            
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = resourceStream.read(buffer)) != -1) {
+                bos.write(buffer, 0, bytesRead);
+            }
+            bos.flush();
+        } finally {
+            resourceStream.close();
+        }
+        
+        return tempFile;
     }
 
     /**
