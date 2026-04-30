@@ -7,7 +7,7 @@ version: '3.8'
 services:
 
   sysmlv2-service:
-    image: openmbee/flexo-sysmlv2:v0.1.0
+    image: openmbee/flexo-sysmlv2:latest
     hostname: sysmlv2-service
     container_name: sysmlv2-service
     command: ["-port=9000"]

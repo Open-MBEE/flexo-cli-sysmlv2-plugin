@@ -20,6 +20,13 @@ The SysML v2 plugin extends Flexo CLI with commands for interacting with SysML v
 - Complete SysML v2 API coverage (projects, elements, branches, commits, etc.)
 - Support for user-defined or auto-generated IDs
 
+## Key Requirements
+
+**Element IDs Must Be UUIDs**: The SysML v2 API requires element IDs to be UUIDs. When pushing model data:
+- Use `urn:uuid:<uuid>` format for element URIs in RDF data
+- Example: `<urn:uuid:550e8400-e29b-41d4-a716-446655440001> a sysml:PartDefinition ;`
+- Non-UUID element IDs will work with `element list` but will fail with `element get`, `element roots`, and `relationship` operations
+
 ## Prerequisites
 
 ```bash
@@ -47,26 +54,27 @@ flexo init
 
 ## Phase 0: Setup Dedicated SysML v2 Organization
 
-Before using the SysML v2 plugin, create a dedicated organization in Flexo MMS to avoid conflicts with existing data:
+Before using the SysML v2 plugin, create a dedicated organization in Flexo MMS:
 
 ```bash
 # Create sysmlv2 organization in Flexo MMS
-flexo init --org sysmlv2 --repo default
+# Use a UUID for the repo name to avoid project list issues
+flexo init --org sysmlv2 --repo 00000000-0000-0000-0000-000000000000
 
 # This creates:
 # - Organization: sysmlv2
-# - Default repository: default
+# - Default repository: 00000000-0000-0000-0000-000000000000 (UUID format)
 ```
 
 Expected output:
 ```
 Initializing Flexo MMS...
 Creating organization: sysmlv2
-Creating repository: default
+Creating repository: 00000000-0000-0000-0000-000000000000
 Initialization complete!
 ```
 
-**Note**: The SysML v2 service will use this organization to store projects as UUID-based repositories.
+**Note**: Using a UUID for the default repo name ensures the `project list` command works correctly. The SysML v2 API requires all project IDs to be UUIDs.
 
 ---
 
@@ -121,10 +129,8 @@ docker ps | grep sysmlv2
 Expected output:
 ```
 CONTAINER ID   IMAGE                           ...   PORTS                    NAMES
-abc123...      openmbee/flexo-sysmlv2:v0.1.0   ...   0.0.0.0:9000->9000/tcp   sysmlv2-service
+abc123...      openmbee/flexo-sysmlv2:latest   ...   0.0.0.0:9000->9000/tcp   sysmlv2-service
 ```
-
-**Note**: The `flexo sysml project list` command may return errors if the backend organization contains non-UUID repository IDs. This is expected if using an existing Flexo MMS instance. Individual project operations (create, get, update) will work correctly with UUID-based projects created through the SysML v2 API.
 
 ---
 
@@ -140,7 +146,7 @@ flexo sysml remote ls
 
 Expected output:
 ```
-SysML v2 Remotes:
+Configured SysML v2 remotes:
   origin * - http://localhost:9000
 ```
 
@@ -159,7 +165,7 @@ flexo sysml remote list
 
 Expected:
 ```
-SysML v2 Remotes:
+Configured SysML v2 remotes:
   origin - http://localhost:9000
   staging - https://sysml-staging.example.com
   production * - https://sysml.example.com
