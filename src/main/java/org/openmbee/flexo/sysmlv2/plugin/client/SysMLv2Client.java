@@ -7,6 +7,8 @@ import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.openmbee.flexo.cli.client.FlexoMmsClient;
+import org.openmbee.flexo.cli.client.HttpClientFactory;
+import org.openmbee.flexo.cli.config.FlexoConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,7 +65,15 @@ public class SysMLv2Client {
     public SysMLv2Client(String baseUrl, FlexoMmsClient flexoClient) {
         this.baseUrl = baseUrl.replaceAll("/$", ""); // Remove trailing slash
         this.flexoClient = flexoClient;
-        this.httpClient = HttpClients.createDefault();
+        // Reuse the proxy configuration from the FlexoMmsClient so SysML v2 API
+        // traffic honors the same proxy/NO_PROXY settings. Falls back to a
+        // default client when no config is available (legacy two-arg client).
+        FlexoConfig config = flexoClient != null ? flexoClient.getConfig() : null;
+        if (config != null) {
+            this.httpClient = new HttpClientFactory(config).createClient();
+        } else {
+            this.httpClient = HttpClients.createDefault();
+        }
     }
 
     // ============ Project Operations ============

@@ -112,7 +112,7 @@ public abstract class SysMLBaseCommand extends PluginCommand {
             
             String bearerToken = flexoRemote.getAuthToken() != null
                 ? flexoRemote.getAuthToken()
-                : flexoConfig.getAuthRemote();
+                : flexoConfig.getAuthToken();
             
             AuthenticationHandler authHandler = new AuthenticationHandler(
                     authEnabled,
@@ -123,7 +123,7 @@ public abstract class SysMLBaseCommand extends PluginCommand {
                     bearerToken
             );
             
-            return new FlexoMmsClient(flexoRemote.getUrl(), authHandler);
+            return new FlexoMmsClient(flexoRemote.getUrl(), authHandler, flexoConfig);
         } catch (Exception e) {
             warn("Failed to create client for Flexo remote '" + remoteName + "': " + e.getMessage());
             return super.getClient();
